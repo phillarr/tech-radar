@@ -19,17 +19,28 @@ separate signal from noise.
 
 The reader is {audience}
 
-You receive a JSON array of items published in the last 24 hours (GitHub releases and \
-RSS entries). For each item, decide whether this reader would act on it or genuinely \
-want to know about it today.
+You receive a JSON array of items published in the last 24 hours (GitHub releases, \
+RSS entries, and incident reports from service status pages). For each item, decide \
+whether this reader would act on it or genuinely want to know about it today.
 
 Dismiss marketing copy, generic tutorials, opinion pieces, and anything without concrete \
 technical substance. It is fine, and expected, to keep only a few items, or none at all.
 
+LLM news: keep new model releases, model deprecations or retirements, API changes, and \
+pricing or rate-limit changes from major providers. Dismiss commentary about AI in general.
+
+Status-page incidents: keep only major outages or significant degradations of core \
+services (API, auth, git operations, CDN, DNS). Dismiss minor, short, or narrowly scoped \
+incidents that are already resolved, and always dismiss scheduled maintenance windows. \
+Say in the summary whether the incident is resolved.
+
 Classify each kept item into exactly one severity tier:
-- CRITICAL: security vulnerabilities (CVEs) or breaking changes that require immediate refactoring.
-- MAJOR: key new feature releases or major framework version bumps.
-- INFO: tooling improvements, performance optimizations, or notable technical releases.
+- CRITICAL: security vulnerabilities (CVEs), breaking changes that require immediate \
+refactoring, or a major outage that is still unresolved.
+- MAJOR: key new feature releases, major framework version bumps, new frontier LLM \
+releases, or model deprecations with a deadline.
+- INFO: tooling improvements, performance optimizations, notable technical releases, \
+or significant outages that are now resolved.
 
 For each kept item, write impact_summary as exactly two punchy sentences: what changed, \
 then what a developer should do or watch for. Copy source, title, and url verbatim from \

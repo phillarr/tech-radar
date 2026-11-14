@@ -35,6 +35,34 @@
       {
         "name": "Lenny's Newsletter (Product)",
         "url": "https://www.lennysnewsletter.com/feed"
+      },
+      {
+        "name": "Simon Willison (LLMs)",
+        "url": "https://simonwillison.net/atom/everything/"
+      },
+      {
+        "name": "OpenAI News",
+        "url": "https://openai.com/news/rss.xml"
+      },
+      {
+        "name": "Google AI Blog",
+        "url": "https://blog.google/technology/ai/rss/"
+      },
+      {
+        "name": "Status · Claude",
+        "url": "https://status.claude.com/history.rss"
+      },
+      {
+        "name": "Status · OpenAI",
+        "url": "https://status.openai.com/history.rss"
+      },
+      {
+        "name": "Status · GitHub",
+        "url": "https://www.githubstatus.com/history.rss"
+      },
+      {
+        "name": "Status · Cloudflare",
+        "url": "https://www.cloudflarestatus.com/history.rss"
       }
     ]
   }
