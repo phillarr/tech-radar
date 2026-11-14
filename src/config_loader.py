@@ -35,6 +35,7 @@ class SettingsConfig(BaseModel):
     hours_lookback: int = Field(default=24, gt=0)
     max_items_per_source: int = Field(default=5, gt=0)
     max_content_chars: int = Field(default=2000, gt=0)
+    audience: str = "a full-stack Python engineer"
     model_name: str = "claude-haiku-5-5"
     effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
     post_when_empty: bool = False

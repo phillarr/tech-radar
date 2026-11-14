@@ -3,6 +3,7 @@
     "hours_lookback": 24,
     "max_items_per_source": 5,
     "max_content_chars": 2000,
+    "audience": "a full-stack Python engineer (backend APIs, frontend, databases, deployment) who also wears a product manager hat. Engineering items matter most. For the product side, keep only substantive items: notable product or AI model launches, pricing/licensing or platform policy changes, and data-backed product insights. Skip generic career or productivity advice.",
     "model_name": "claude-haiku-5-5",
     "effort": "medium",
     "post_when_empty": false,
@@ -20,8 +21,20 @@
         "url": "https://hnrss.org/best"
       },
       {
+        "name": "Hacker News - 200+ points",
+        "url": "https://hnrss.org/newest?points=200"
+      },
+      {
+        "name": "Lobsters",
+        "url": "https://lobste.rs/rss"
+      },
+      {
         "name": "Python Insider",
         "url": "https://blog.python.org/feeds/posts/default"
+      },
+      {
+        "name": "Lenny's Newsletter (Product)",
+        "url": "https://www.lennysnewsletter.com/feed"
       }
     ]
   }

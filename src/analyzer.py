@@ -13,12 +13,14 @@ from src.fetcher import RawItem
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """\
-You are a Senior Staff Engineer writing the morning tech-watch brief for a team of \
-Python backend engineers. Your job is to separate signal from noise.
+SYSTEM_PROMPT_TEMPLATE = """\
+You are a Senior Staff Engineer writing the morning tech-watch brief. Your job is to \
+separate signal from noise.
+
+The reader is {audience}
 
 You receive a JSON array of items published in the last 24 hours (GitHub releases and \
-RSS entries). For each item, decide whether an engineer would act on it or genuinely \
+RSS entries). For each item, decide whether this reader would act on it or genuinely \
 want to know about it today.
 
 Dismiss marketing copy, generic tutorials, opinion pieces, and anything without concrete \
@@ -60,6 +62,7 @@ def analyze(
     api_key: str,
     model: str,
     effort: str = "medium",
+    audience: str = "a full-stack Python engineer",
 ) -> DailyTechReport:
     client = anthropic.Anthropic(api_key=api_key)
     payload = json.dumps(items, ensure_ascii=False, indent=1)
@@ -68,7 +71,7 @@ def analyze(
         response = client.messages.parse(
             model=model,
             max_tokens=16000,
-            system=SYSTEM_PROMPT,
+            system=SYSTEM_PROMPT_TEMPLATE.format(audience=audience.strip()),
             output_config={"effort": effort},
             messages=[
                 {

@@ -32,7 +32,13 @@ def run() -> int:
             send_to_slack(empty, secrets.slack_webhook_url, secrets.dry_run)
         return 0
 
-    report = analyze(items, secrets.anthropic_api_key, settings.model_name, settings.effort)
+    report = analyze(
+        items,
+        secrets.anthropic_api_key,
+        settings.model_name,
+        settings.effort,
+        settings.audience,
+    )
     logger.info("Analysis kept %d of %d item(s)", len(report.alerts), len(items))
 
     if not report.alerts and not settings.post_when_empty:

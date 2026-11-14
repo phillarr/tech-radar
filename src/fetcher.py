@@ -159,4 +159,14 @@ def fetch_all(config: AppConfig, github_token: Optional[str] = None) -> List[Raw
         settings.request_timeout_seconds,
     )
     logger.info("Fetched %d GitHub release(s) and %d RSS item(s)", len(github_items), len(rss_items))
-    return github_items + rss_items
+
+    # Feeds overlap (e.g. HN Best vs HN 200+ points): keep the first occurrence of each URL.
+    seen: set[str] = set()
+    unique: List[RawItem] = []
+    for item in github_items + rss_items:
+        if item["url"] not in seen:
+            seen.add(item["url"])
+            unique.append(item)
+    if len(unique) != len(github_items) + len(rss_items):
+        logger.info("Removed %d duplicate item(s)", len(github_items) + len(rss_items) - len(unique))
+    return unique
