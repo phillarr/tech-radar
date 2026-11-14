@@ -1,0 +1,28 @@
+{
+  "settings": {
+    "hours_lookback": 24,
+    "max_items_per_source": 5,
+    "max_content_chars": 2000,
+    "model_name": "claude-haiku-5-5",
+    "effort": "medium",
+    "post_when_empty": false,
+    "request_timeout_seconds": 20
+  },
+  "sources": {
+    "github_repositories": [
+      "fastapi/fastapi",
+      "pydantic/pydantic",
+      "fastapi/sqlmodel"
+    ],
+    "rss_feeds": [
+      {
+        "name": "Hacker News - Best",
+        "url": "https://hnrss.org/best"
+      },
+      {
+        "name": "Python Insider",
+        "url": "https://blog.python.org/feeds/posts/default"
+      }
+    ]
+  }
+}
