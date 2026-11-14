@@ -37,15 +37,17 @@ Selection rules:
 - Keep at most {max_alerts} items, usually 5 to {max_alerts}. On a quiet day keep fewer; \
 keeping none is acceptable.
 - Dismiss marketing copy, generic tutorials, listicles, and anything without concrete \
-substance. When several items cover the same story, keep only the most authoritative one \
-(prefer the official announcement).
+substance.
+- One alert per story, and never the same url twice. When several items cover the same \
+story, keep only the most authoritative one: if the company's own announcement is among \
+the items, use that item, not a media article about it.
 - LLM news: keep new model releases, model deprecations or retirements, API changes, \
 pricing or rate-limit changes, and agent/tooling launches from major providers. Dismiss \
 generic commentary about AI.
 - Status-page incidents: keep only major outages or significant degradations of core \
 services (API, auth, git operations, CDN, DNS). Dismiss minor or narrowly scoped incidents \
 that are already resolved, and always dismiss scheduled maintenance. Say in the summary \
-whether the incident is resolved.
+whether the incident is resolved. A resolved incident is always INFO.
 - Regulation (CNIL, European Commission, NIST): keep binding rules, enforcement actions, \
 official guidance, and deadlines that affect AI products.
 
@@ -161,24 +163,40 @@ def analyze(
         response.usage.input_tokens,
         response.usage.output_tokens,
     )
-    return postprocess(report, {item["url"] for item in items}, max_alerts)
+    return postprocess(report, items, max_alerts)
 
 
-def postprocess(report: DailyTechReport, known_urls: set[str], max_alerts: int) -> DailyTechReport:
-    """Drop hallucinated links, clamp scores, rank by score and enforce the item cap."""
-    kept = [a for a in report.alerts if a.url in known_urls]
-    if len(kept) != len(report.alerts):
-        logger.warning("Dropped %d alert(s) with unknown URLs", len(report.alerts) - len(kept))
-    for alert in kept:
-        alert.score = max(0, min(100, alert.score))
-    kept.sort(key=lambda a: a.score, reverse=True)
+def postprocess(report: DailyTechReport, items: List[RawItem], max_alerts: int) -> DailyTechReport:
+    """Drop hallucinated links and duplicates, restore verbatim fields, rank and cap."""
+    items_by_url = {item["url"]: item for item in items}
+    kept: List[TechAlert] = []
+    seen: set[str] = set()
+    for alert in sorted(report.alerts, key=lambda a: a.score, reverse=True):
+        item = items_by_url.get(alert.url)
+        if item is None:
+            logger.warning("Dropped alert with unknown URL: %s", alert.url)
+            continue
+        if alert.url in seen:
+            logger.warning("Dropped duplicate alert: %s", alert.url)
+            continue
+        seen.add(alert.url)
+        # Source and title come from the ingested item, never from the model.
+        kept.append(
+            alert.model_copy(
+                update={
+                    "source": item["source"],
+                    "title": item["title"],
+                    "score": max(0, min(100, alert.score)),
+                }
+            )
+        )
     if len(kept) > max_alerts:
         logger.info("Trimmed %d alert(s) beyond the cap of %d", len(kept) - max_alerts, max_alerts)
         kept = kept[:max_alerts]
 
     signals = []
     for signal in report.signals[:3]:
-        urls = [u for u in signal.related_urls if u in known_urls]
+        urls = list(dict.fromkeys(u for u in signal.related_urls if u in items_by_url))
         if urls:
             signals.append(signal.model_copy(update={"related_urls": urls}))
     return DailyTechReport(headline=report.headline, alerts=kept, signals=signals)

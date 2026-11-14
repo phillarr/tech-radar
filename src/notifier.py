@@ -108,7 +108,12 @@ def build_payload(report: DailyTechReport) -> Dict[str, Any]:
         blocks += [{"type": "divider"}, _section("*📡 Signals*")]
         blocks += [_signal_block(s) for s in report.signals]
 
-    return {"text": f"Tech Watch: {_escape(report.headline)}", "blocks": blocks}
+    return {
+        "text": f"Tech Watch: {_escape(report.headline)}",
+        "blocks": blocks,
+        "unfurl_links": False,  # no automatic link preview under the report
+        "unfurl_media": False,
+    }
 
 
 def send_to_slack(report: DailyTechReport, webhook_url: str, dry_run: bool = False) -> None:
