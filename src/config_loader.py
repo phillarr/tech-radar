@@ -39,6 +39,7 @@ class SettingsConfig(BaseModel):
     audience: str = "a full-stack Python engineer"
     model_name: str = "claude-haiku-5-5"
     effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
+    max_alerts: int = Field(default=10, gt=0, le=30)
     post_when_empty: bool = False
     request_timeout_seconds: float = Field(default=20, gt=0)
 

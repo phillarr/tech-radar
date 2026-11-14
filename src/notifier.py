@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 
 import requests
 
-from src.analyzer import DailyTechReport, TechAlert
+from src.analyzer import DailyTechReport, Signal, TechAlert
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,21 @@ BADGES = {
     "CRITICAL": "🔴 [CRITICAL]",
     "MAJOR": "🟡 [MAJOR]",
     "INFO": "🔵 [INFO]",
+}
+AXIS_ICONS = {
+    "AI & GenAI": "🤖",
+    "AI Product Management": "🧭",
+    "AI Engineering": "🛠️",
+    "Cloud & Infrastructure": "☁️",
+    "Tech & Startups": "🚀",
+    "AI Governance": "⚖️",
+}
+SOURCE_TYPE_LABELS = {
+    "OFFICIAL": "Official announcement",
+    "EXPERIMENT": "Experiment / research",
+    "BENCHMARK": "Independent benchmark",
+    "NEWS": "News report",
+    "OPINION": "Opinion",
 }
 # Slack limits: 50 blocks per message, 3000 chars per section text.
 MAX_BLOCKS = 50
@@ -27,14 +42,37 @@ def _escape(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _section(text: str) -> Dict[str, Any]:
+    return {"type": "section", "text": {"type": "mrkdwn", "text": text[:MAX_SECTION_CHARS]}}
+
+
+def _context(text: str) -> Dict[str, Any]:
+    return {"type": "context", "elements": [{"type": "mrkdwn", "text": text}]}
+
+
 def _alert_block(alert: TechAlert) -> Dict[str, Any]:
     title = _escape(alert.title).replace("|", "¦")
-    text = (
+    return _section(
         f"*{BADGES[alert.importance]}* <{alert.url}|{title}>\n"
         f"{_escape(alert.impact_summary)}\n"
-        f"_{_escape(alert.source)}_"
+        f"_{_escape(alert.source)} · {SOURCE_TYPE_LABELS[alert.source_type]}_"
     )
-    return {"type": "section", "text": {"type": "mrkdwn", "text": text[:MAX_SECTION_CHARS]}}
+
+
+def _signal_block(signal: Signal) -> Dict[str, Any]:
+    links = " ".join(f"<{url}|[{i}]>" for i, url in enumerate(signal.related_urls, start=1))
+    return _section(
+        f"• *{_escape(signal.trend)}*\n"
+        f"   ↳ _Opportunity:_ {_escape(signal.product_opportunity)}  {links}"
+    )
+
+
+def _group_by_axis(alerts: List[TechAlert]) -> List[List[TechAlert]]:
+    """Group alerts by axis; groups and their items keep the score ranking."""
+    groups: Dict[str, List[TechAlert]] = {}
+    for alert in alerts:  # already sorted by score, so dict order = best group first
+        groups.setdefault(alert.axis, []).append(alert)
+    return list(groups.values())
 
 
 def build_payload(report: DailyTechReport) -> Dict[str, Any]:
@@ -44,27 +82,31 @@ def build_payload(report: DailyTechReport) -> Dict[str, Any]:
 
     blocks: List[Dict[str, Any]] = [
         {"type": "header", "text": {"type": "plain_text", "text": f"☕ Tech Watch — {today}"}},
-        {"type": "section", "text": {"type": "mrkdwn", "text": f"*{_escape(report.headline)}*"}},
-        {"type": "context", "elements": [{"type": "mrkdwn", "text": summary}]},
+        _section(f"*{_escape(report.headline)}*"),
+        _context(summary),
     ]
-
     if not report.alerts:
-        blocks.append(
-            {"type": "section", "text": {"type": "mrkdwn", "text": "_Nothing actionable today._"}}
-        )
+        blocks.append(_section("_Nothing actionable today._"))
 
-    current_level = None
-    for alert in report.alerts:
-        if len(blocks) >= MAX_BLOCKS - 2:
-            remaining = len(report.alerts) - report.alerts.index(alert)
-            blocks.append(
-                {"type": "context", "elements": [{"type": "mrkdwn", "text": f"…and {remaining} more"}]}
-            )
+    # Reserve room for the signals section and an overflow note.
+    budget = MAX_BLOCKS - (2 + len(report.signals) if report.signals else 0) - 1
+    shown = 0
+    for group in _group_by_axis(report.alerts):
+        if len(blocks) + 3 > budget:
             break
-        if alert.importance != current_level:
-            blocks.append({"type": "divider"})
-            current_level = alert.importance
-        blocks.append(_alert_block(alert))
+        axis = group[0].axis
+        blocks += [{"type": "divider"}, _section(f"*{AXIS_ICONS[axis]} {axis}*")]
+        for alert in group:
+            if len(blocks) >= budget:
+                break
+            blocks.append(_alert_block(alert))
+            shown += 1
+    if shown < len(report.alerts):
+        blocks.append(_context(f"…and {len(report.alerts) - shown} more"))
+
+    if report.signals:
+        blocks += [{"type": "divider"}, _section("*📡 Signals*")]
+        blocks += [_signal_block(s) for s in report.signals]
 
     return {"text": f"Tech Watch: {_escape(report.headline)}", "blocks": blocks}
 

@@ -28,7 +28,9 @@ def run() -> int:
     if not items:
         logger.info("No items in the last %dh; skipping the LLM call.", settings.hours_lookback)
         if settings.post_when_empty:
-            empty = DailyTechReport(headline="Quiet morning: no new updates from tracked sources.", alerts=[])
+            empty = DailyTechReport(
+                headline="Quiet morning: no new updates from tracked sources.", alerts=[], signals=[]
+            )
             send_to_slack(empty, secrets.slack_webhook_url, secrets.dry_run)
         return 0
 
@@ -38,6 +40,7 @@ def run() -> int:
         settings.model_name,
         settings.effort,
         settings.audience,
+        settings.max_alerts,
     )
     logger.info("Analysis kept %d of %d item(s)", len(report.alerts), len(items))
 

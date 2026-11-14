@@ -2,10 +2,11 @@
   "settings": {
     "hours_lookback": 24,
     "max_items_per_source": 5,
-    "max_content_chars": 2000,
-    "audience": "a full-stack Python engineer (backend APIs, frontend, databases, deployment) who also wears a product manager hat. Engineering items matter most. For the product side, keep only substantive items: notable product or AI model launches, pricing/licensing or platform policy changes, and data-backed product insights. Skip generic career or productivity advice.",
+    "max_content_chars": 1200,
+    "audience": "an AI product manager with a full-stack Python engineering background (FastAPI, Pydantic, SQLModel). They follow six axes: AI & GenAI, AI product management, AI engineering, cloud & infrastructure, tech & startups, and AI governance. On the product side they want model and product launches, pricing/licensing and platform policy changes, competitor moves, adoption data, and product opportunities. On the engineering side they want releases and breaking changes in their Python stack, AI tooling, and outages of services they depend on. Skip generic career or productivity advice.",
     "model_name": "claude-haiku-5-5",
     "effort": "medium",
+    "max_alerts": 10,
     "post_when_empty": false,
     "request_timeout_seconds": 20
   },
@@ -16,63 +17,40 @@
       "fastapi/sqlmodel"
     ],
     "rss_feeds": [
-      {
-        "name": "Hacker News - Best",
-        "url": "https://hnrss.org/best"
-      },
-      {
-        "name": "Hacker News - 200+ points",
-        "url": "https://hnrss.org/newest?points=200"
-      },
-      {
-        "name": "Lobsters",
-        "url": "https://lobste.rs/rss"
-      },
-      {
-        "name": "Python Insider",
-        "url": "https://blog.python.org/feeds/posts/default"
-      },
-      {
-        "name": "Lenny's Newsletter (Product)",
-        "url": "https://www.lennysnewsletter.com/feed"
-      },
-      {
-        "name": "Simon Willison (LLMs)",
-        "url": "https://simonwillison.net/atom/everything/"
-      },
-      {
-        "name": "OpenAI News",
-        "url": "https://openai.com/news/rss.xml"
-      },
-      {
-        "name": "Google AI Blog",
-        "url": "https://blog.google/technology/ai/rss/"
-      },
-      {
-        "name": "Status · Claude",
-        "url": "https://status.claude.com/history.rss"
-      },
-      {
-        "name": "Status · OpenAI",
-        "url": "https://status.openai.com/history.rss"
-      },
-      {
-        "name": "Status · GitHub",
-        "url": "https://www.githubstatus.com/history.rss"
-      },
-      {
-        "name": "Status · Cloudflare",
-        "url": "https://www.cloudflarestatus.com/history.rss"
-      },
-      {
-        "name": "Status · Azure",
-        "url": "https://rssfeed.azure.status.microsoft/en-us/status/feed/"
-      },
-      {
-        "name": "BleepingComputer (outages & security)",
-        "url": "https://www.bleepingcomputer.com/feed/",
-        "max_items": 15
-      }
+      { "name": "OpenAI News", "url": "https://openai.com/news/rss.xml" },
+      { "name": "Google DeepMind", "url": "https://deepmind.google/blog/rss.xml" },
+      { "name": "Google AI Blog", "url": "https://blog.google/technology/ai/rss/" },
+      { "name": "Google Research", "url": "https://research.google/blog/rss/" },
+      { "name": "Microsoft Research", "url": "https://www.microsoft.com/en-us/research/feed/" },
+      { "name": "Mistral AI", "url": "https://mistral.ai/rss.xml" },
+      { "name": "NVIDIA Blog", "url": "https://blogs.nvidia.com/feed/" },
+      { "name": "NVIDIA Technical Blog", "url": "https://developer.nvidia.com/blog/feed/" },
+      { "name": "AWS Machine Learning", "url": "https://aws.amazon.com/blogs/machine-learning/feed/" },
+
+      { "name": "Simon Willison (LLMs)", "url": "https://simonwillison.net/atom/everything/" },
+      { "name": "Lenny's Newsletter (Product)", "url": "https://www.lennysnewsletter.com/feed" },
+      { "name": "Hacker News - Best", "url": "https://hnrss.org/best" },
+      { "name": "Hacker News - 200+ points", "url": "https://hnrss.org/newest?points=200" },
+      { "name": "Lobsters", "url": "https://lobste.rs/rss" },
+      { "name": "Python Insider", "url": "https://blog.python.org/feeds/posts/default" },
+
+      { "name": "TechCrunch AI", "url": "https://techcrunch.com/category/artificial-intelligence/feed/" },
+      { "name": "The Verge AI", "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml" },
+      { "name": "Ars Technica", "url": "https://feeds.arstechnica.com/arstechnica/index" },
+      { "name": "MIT Technology Review", "url": "https://www.technologyreview.com/feed/" },
+      { "name": "WIRED AI", "url": "https://www.wired.com/feed/tag/ai/latest/rss" },
+      { "name": "IEEE Spectrum AI", "url": "https://spectrum.ieee.org/feeds/topic/artificial-intelligence.rss" },
+
+      { "name": "CNIL", "url": "https://www.cnil.fr/fr/rss.xml" },
+      { "name": "European Commission (Digital Strategy)", "url": "https://digital-strategy.ec.europa.eu/en/rss.xml" },
+      { "name": "NIST News", "url": "https://www.nist.gov/news-events/news/rss.xml" },
+
+      { "name": "Status · Claude", "url": "https://status.claude.com/history.rss" },
+      { "name": "Status · OpenAI", "url": "https://status.openai.com/history.rss" },
+      { "name": "Status · GitHub", "url": "https://www.githubstatus.com/history.rss" },
+      { "name": "Status · Cloudflare", "url": "https://www.cloudflarestatus.com/history.rss" },
+      { "name": "Status · Azure", "url": "https://rssfeed.azure.status.microsoft/en-us/status/feed/" },
+      { "name": "BleepingComputer (outages & security)", "url": "https://www.bleepingcomputer.com/feed/", "max_items": 15 }
     ]
   }
 }
