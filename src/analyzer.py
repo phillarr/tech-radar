@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Literal, Optional
 
 import anthropic
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from src.fetcher import RawItem
 
@@ -130,24 +130,30 @@ Finally, write intro: two or three sentences synthesizing the most important dev
 """
 
 
-class EventSource(BaseModel):
+class _Strict(BaseModel):
+    """Model output schema: closed objects, as required by structured outputs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class EventSource(_Strict):
     url: str
     role: Literal["PRIMARY", "SUPPORTING"]
 
 
-class RecommendedAction(BaseModel):
+class RecommendedAction(_Strict):
     action: str
     type: Literal["INVESTIGATE", "UPGRADE", "MITIGATE", "MONITOR", "DECIDE"]
     timeframe: Literal["NOW", "THIS_WEEK", "THIS_MONTH", "LATER"]
 
 
-class Scores(BaseModel):
+class Scores(_Strict):
     relevance: int
     impact: int
     urgency: int
 
 
-class Event(BaseModel):
+class Event(_Strict):
     title: str
     category: Category
     secondary_categories: List[Category] = Field(description="At most two")
@@ -166,7 +172,7 @@ class Event(BaseModel):
     priority: Priority
 
 
-class Signal(BaseModel):
+class Signal(_Strict):
     signal: str = Field(description="One-sentence convergence to watch")
     evidence_level: Literal["WEAK_SIGNAL", "CORROBORATED"]
     evidence_urls: List[str]
@@ -174,12 +180,15 @@ class Signal(BaseModel):
     what_to_watch: str
 
 
-class AnalysisOutput(BaseModel):
+class AnalysisOutput(_Strict):
     """What the model returns."""
 
     intro: str
     events: List[Event]
     signals: List[Signal]
+
+
+OUTPUT_SCHEMA = AnalysisOutput.model_json_schema()
 
 
 class ResolvedSource(BaseModel):
@@ -228,11 +237,17 @@ def analyze(
     system = SYSTEM_PROMPT_TEMPLATE.format(audience=audience.strip(), max_events=max_events)
 
     try:
-        response = client.messages.parse(
+        # messages.create + raw JSON schema (rather than messages.parse) so that the stop
+        # reason can be inspected before the JSON is validated: a refusal or truncation
+        # mid-output would otherwise surface as an opaque JSON parsing error.
+        response = client.messages.create(
             model=model,
             max_tokens=16000,
             system=system,
-            output_config={"effort": effort},
+            output_config={
+                "effort": effort,
+                "format": {"type": "json_schema", "schema": OUTPUT_SCHEMA},
+            },
             messages=[
                 {
                     "role": "user",
@@ -243,7 +258,6 @@ def analyze(
                     ),
                 }
             ],
-            output_format=AnalysisOutput,
         )
     except anthropic.RateLimitError as exc:
         raise AnalysisError(f"Anthropic rate limit hit: {exc}") from exc
@@ -252,19 +266,27 @@ def analyze(
     except anthropic.APIConnectionError as exc:
         raise AnalysisError(f"Could not reach the Anthropic API: {exc}") from exc
 
+    logger.info(
+        "Claude stop_reason=%s, %d input / %d output tokens",
+        response.stop_reason,
+        response.usage.input_tokens,
+        response.usage.output_tokens,
+    )
     if response.stop_reason == "refusal":
         raise AnalysisError(f"Model refused the request: {response.stop_details}")
     if response.stop_reason == "max_tokens":
         raise AnalysisError("Model output was truncated (max_tokens reached)")
 
-    output = response.parsed_output
-    if output is None:
-        raise AnalysisError("Model returned no parseable report")
+    text = next((b.text for b in response.content if b.type == "text"), "")
+    try:
+        output = AnalysisOutput.model_validate_json(text)
+    except ValidationError as exc:
+        raise AnalysisError(f"Model output does not match the contract: {exc}") from exc
 
     logger.info(
-        "Claude usage: %d input / %d output tokens (prompt %s)",
-        response.usage.input_tokens,
-        response.usage.output_tokens,
+        "Parsed %d event(s) and %d signal(s) (prompt %s)",
+        len(output.events),
+        len(output.signals),
         PROMPT_VERSION,
     )
     report = postprocess(output, items, max_events)
