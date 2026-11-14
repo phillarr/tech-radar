@@ -11,10 +11,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# OFFICIAL: the company, project, lab or regulator itself. MEDIA: third-party reporting.
+# RESEARCH: papers and research blogs. COMMUNITY: forums, aggregators, individual blogs.
+SourceType = Literal["OFFICIAL", "MEDIA", "RESEARCH", "COMMUNITY"]
+
 
 class RSSSource(BaseModel):
     name: str
     url: HttpUrl
+    type: SourceType
     max_items: Optional[int] = Field(default=None, gt=0)  # overrides settings.max_items_per_source
 
 
@@ -39,7 +44,8 @@ class SettingsConfig(BaseModel):
     audience: str = "a full-stack Python engineer"
     model_name: str = "claude-haiku-5-5"
     effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
-    max_alerts: int = Field(default=10, gt=0, le=30)
+    max_events: int = Field(default=10, gt=0, le=30)
+    timezone: str = "Europe/Paris"  # display timezone; storage stays UTC
     post_when_empty: bool = False
     request_timeout_seconds: float = Field(default=20, gt=0)
 

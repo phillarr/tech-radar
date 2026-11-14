@@ -12,7 +12,7 @@ from pathlib import Path
 if __package__ in (None, ""):  # allow `python src/main.py` as well
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.analyzer import DailyTechReport, analyze
+from src.analyzer import DailyReport, analyze
 from src.config_loader import load_all
 from src.fetcher import fetch_all
 from src.notifier import send_to_slack
@@ -28,10 +28,10 @@ def run() -> int:
     if not items:
         logger.info("No items in the last %dh; skipping the LLM call.", settings.hours_lookback)
         if settings.post_when_empty:
-            empty = DailyTechReport(
-                headline="Quiet morning: no new updates from tracked sources.", alerts=[], signals=[]
+            empty = DailyReport(
+                intro="Quiet morning: no new updates from tracked sources.", events=[], signals=[]
             )
-            send_to_slack(empty, secrets.slack_webhook_url, secrets.dry_run)
+            send_to_slack(empty, secrets.slack_webhook_url, secrets.dry_run, settings.timezone)
         return 0
 
     report = analyze(
@@ -40,15 +40,19 @@ def run() -> int:
         settings.model_name,
         settings.effort,
         settings.audience,
-        settings.max_alerts,
+        settings.max_events,
     )
-    logger.info("Analysis kept %d of %d item(s)", len(report.alerts), len(items))
+    covered = sum(len(e.sources) for e in report.events)
+    logger.info(
+        "Analysis kept %d event(s) covering %d of %d item(s), %d signal(s)",
+        len(report.events), covered, len(items), len(report.signals),
+    )
 
-    if not report.alerts and not settings.post_when_empty:
-        logger.info("No actionable alerts; nothing posted.")
+    if not report.events and not settings.post_when_empty:
+        logger.info("No actionable events; nothing posted.")
         return 0
 
-    send_to_slack(report, secrets.slack_webhook_url, secrets.dry_run)
+    send_to_slack(report, secrets.slack_webhook_url, secrets.dry_run, settings.timezone)
     return 0
 
 

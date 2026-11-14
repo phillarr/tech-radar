@@ -6,10 +6,11 @@ import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List
+from zoneinfo import ZoneInfo
 
 import requests
 
-from src.analyzer import DailyTechReport, Signal, TechAlert
+from src.analyzer import DailyReport, IntelligenceEvent, Signal
 
 logger = logging.getLogger(__name__)
 
@@ -18,21 +19,34 @@ BADGES = {
     "MAJOR": "🟡 [MAJOR]",
     "INFO": "🔵 [INFO]",
 }
-AXIS_ICONS = {
-    "AI & GenAI": "🤖",
-    "AI Product Management": "🧭",
-    "AI Engineering": "🛠️",
-    "Cloud & Infrastructure": "☁️",
-    "Tech & Startups": "🚀",
-    "AI Governance": "⚖️",
+CATEGORIES = {
+    "CYBERSECURITY": "🛡️ Cybersecurity",
+    "AI_PRODUCT_MANAGEMENT": "🧭 AI Product Management",
+    "AI_ENGINEERING": "🛠️ AI Engineering",
+    "CLOUD_INFRASTRUCTURE": "☁️ Cloud & Infrastructure",
+    "TECH_STARTUPS": "🚀 Tech & Startups",
+    "RESEARCH_INNOVATION": "🔬 Research & Innovation",
+    "AI_GOVERNANCE": "⚖️ AI Governance",
 }
-SOURCE_TYPE_LABELS = {
-    "OFFICIAL": "Official announcement",
-    "EXPERIMENT": "Experiment / research",
-    "BENCHMARK": "Independent benchmark",
-    "NEWS": "News report",
-    "OPINION": "Opinion",
+SOURCE_TYPES = {
+    "OFFICIAL": "official",
+    "MEDIA": "media",
+    "RESEARCH": "research",
+    "COMMUNITY": "community",
 }
+EVIDENCE = {
+    "CONFIRMED": "✅ confirmed",
+    "REPORTED": "📰 reported",
+    "UNVERIFIED": "❔ unverified",
+}
+TIMEFRAMES = {
+    "NOW": "now",
+    "THIS_WEEK": "this week",
+    "THIS_MONTH": "this month",
+    "LATER": "later",
+}
+SIGNAL_LEVELS = {"WEAK_SIGNAL": "weak signal", "CORROBORATED": "corroborated"}
+
 # Slack limits: 50 blocks per message, 3000 chars per section text.
 MAX_BLOCKS = 50
 MAX_SECTION_CHARS = 3000
@@ -40,6 +54,10 @@ MAX_SECTION_CHARS = 3000
 
 def _escape(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _link(url: str, label: str) -> str:
+    return f"<{url}|{_escape(label).replace('|', '¦')}>"
 
 
 def _section(text: str) -> Dict[str, Any]:
@@ -50,74 +68,103 @@ def _context(text: str) -> Dict[str, Any]:
     return {"type": "context", "elements": [{"type": "mrkdwn", "text": text}]}
 
 
-def _alert_block(alert: TechAlert) -> Dict[str, Any]:
-    title = _escape(alert.title).replace("|", "¦")
+def _local_time(iso: str, tz: ZoneInfo) -> str:
+    try:
+        return datetime.fromisoformat(iso).astimezone(tz).strftime("%d %b %H:%M")
+    except ValueError:
+        return ""
+
+
+def _event_block(event: IntelligenceEvent, tz: ZoneInfo) -> Dict[str, Any]:
+    primary = event.sources[0]
+    lines = [
+        f"*{BADGES[event.priority]}* {_link(primary.url, event.title)}",
+        f"*What happened:* {_escape(event.summary)}",
+        f"*Why it matters:* {_escape(event.why_it_matters)}",
+    ]
+    if event.recommended_actions:
+        action = event.recommended_actions[0]
+        lines.append(
+            f"*Recommended action:* {_escape(action.action)} _({TIMEFRAMES[action.timeframe]})_"
+        )
+    if event.product_opportunity:
+        lines.append(f"*Product opportunity:* {_escape(event.product_opportunity)}")
+
+    others = " ".join(_link(s.url, f"[{i}]") for i, s in enumerate(event.sources[1:], start=2))
+    n = len(event.sources)
+    trace = (
+        f"_Source: {_escape(primary.name)} ({SOURCE_TYPES.get(primary.type, primary.type)}) · "
+        f"{n} source{'s' if n > 1 else ''} · {EVIDENCE[event.evidence_status]} · "
+        f"{_local_time(primary.published_at, tz)}_"
+    )
+    lines.append(f"{trace} {others}".rstrip())
+    return _section("\n".join(lines))
+
+
+def _signal_block(signal: Signal, label_of: Dict[str, str]) -> Dict[str, Any]:
+    evidence = " · ".join(_link(url, label_of.get(url, "source")) for url in signal.evidence_urls)
     return _section(
-        f"*{BADGES[alert.importance]}* <{alert.url}|{title}>\n"
-        f"{_escape(alert.impact_summary)}\n"
-        f"_{_escape(alert.source)} · {SOURCE_TYPE_LABELS[alert.source_type]}_"
+        f"*Signal:* {_escape(signal.signal)} _({SIGNAL_LEVELS[signal.evidence_level]})_\n"
+        f"*Evidence:* {evidence}\n"
+        f"*Interpretation:* {_escape(signal.interpretation)}\n"
+        f"*What to watch next:* {_escape(signal.what_to_watch)}"
     )
 
 
-def _signal_block(signal: Signal) -> Dict[str, Any]:
-    links = " ".join(f"<{url}|[{i}]>" for i, url in enumerate(signal.related_urls, start=1))
-    return _section(
-        f"• *{_escape(signal.trend)}*\n"
-        f"   ↳ _Opportunity:_ {_escape(signal.product_opportunity)}  {links}"
+def build_payload(report: DailyReport, tz_name: str = "Europe/Paris") -> Dict[str, Any]:
+    tz = ZoneInfo(tz_name)
+    today = datetime.now(timezone.utc).astimezone(tz).strftime("%A %d %B %Y")
+    counts = "   ".join(
+        f"{badge} {sum(e.priority == level for e in report.events)}"
+        for level, badge in BADGES.items()
     )
-
-
-def _group_by_axis(alerts: List[TechAlert]) -> List[List[TechAlert]]:
-    """Group alerts by axis; groups and their items keep the score ranking."""
-    groups: Dict[str, List[TechAlert]] = {}
-    for alert in alerts:  # already sorted by score, so dict order = best group first
-        groups.setdefault(alert.axis, []).append(alert)
-    return list(groups.values())
-
-
-def build_payload(report: DailyTechReport) -> Dict[str, Any]:
-    today = datetime.now(timezone.utc).strftime("%A %d %B %Y")
-    counts = {level: sum(a.importance == level for a in report.alerts) for level in BADGES}
-    summary = "  ".join(f"{BADGES[level]} {n}" for level, n in counts.items())
 
     blocks: List[Dict[str, Any]] = [
         {"type": "header", "text": {"type": "plain_text", "text": f"☕ Tech Watch — {today}"}},
-        _section(f"*{_escape(report.headline)}*"),
-        _context(summary),
+        _section(f"*Today's intelligence*\n{_escape(report.intro)}"),
+        _context(counts),
     ]
-    if not report.alerts:
+    if not report.events:
         blocks.append(_section("_Nothing actionable today._"))
 
-    # Reserve room for the signals section and an overflow note.
-    budget = MAX_BLOCKS - (2 + len(report.signals) if report.signals else 0) - 1
+    # Categories appear in the order of their best-ranked event.
+    groups: Dict[str, List[IntelligenceEvent]] = {}
+    for event in report.events:
+        groups.setdefault(event.category, []).append(event)
+
+    budget = MAX_BLOCKS - (2 + len(report.signals) if report.signals else 0) - 2
     shown = 0
-    for group in _group_by_axis(report.alerts):
+    for category, events in groups.items():
         if len(blocks) + 3 > budget:
             break
-        axis = group[0].axis
-        blocks += [{"type": "divider"}, _section(f"*{AXIS_ICONS[axis]} {axis}*")]
-        for alert in group:
+        blocks += [{"type": "divider"}, _section(f"*{CATEGORIES[category]}*")]
+        for event in events:
             if len(blocks) >= budget:
                 break
-            blocks.append(_alert_block(alert))
+            blocks.append(_event_block(event, tz))
             shown += 1
-    if shown < len(report.alerts):
-        blocks.append(_context(f"…and {len(report.alerts) - shown} more"))
+    if shown < len(report.events):
+        blocks.append(_context(f"…and {len(report.events) - shown} more"))
 
     if report.signals:
+        label_of = {s.url: s.name for e in report.events for s in e.sources}
+        label_of = {**report.source_names, **label_of}
         blocks += [{"type": "divider"}, _section("*📡 Signals*")]
-        blocks += [_signal_block(s) for s in report.signals]
+        blocks += [_signal_block(s, label_of) for s in report.signals]
 
+    blocks.append(_context(f"Model {report.model or 'n/a'} · prompt {report.prompt_version}"))
     return {
-        "text": f"Tech Watch: {_escape(report.headline)}",
+        "text": f"Tech Watch: {_escape(report.intro)}",
         "blocks": blocks,
         "unfurl_links": False,  # no automatic link preview under the report
         "unfurl_media": False,
     }
 
 
-def send_to_slack(report: DailyTechReport, webhook_url: str, dry_run: bool = False) -> None:
-    payload = build_payload(report)
+def send_to_slack(
+    report: DailyReport, webhook_url: str, dry_run: bool = False, tz_name: str = "Europe/Paris"
+) -> None:
+    payload = build_payload(report, tz_name)
     if dry_run:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         logger.info("DRY_RUN enabled: Slack payload printed, not posted")
@@ -126,4 +173,4 @@ def send_to_slack(report: DailyTechReport, webhook_url: str, dry_run: bool = Fal
     resp = requests.post(webhook_url, json=payload, timeout=15)
     if resp.status_code != 200:
         raise RuntimeError(f"Slack webhook returned {resp.status_code}: {resp.text[:200]}")
-    logger.info("Report posted to Slack (%d alert(s))", len(report.alerts))
+    logger.info("Report posted to Slack (%d event(s))", len(report.events))

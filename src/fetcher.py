@@ -24,8 +24,10 @@ _WS_RE = re.compile(r"\s+")
 
 class RawItem(TypedDict):
     source: str
+    source_type: str  # OFFICIAL | MEDIA | RESEARCH | COMMUNITY
     title: str
     url: str
+    published_at: str  # ISO 8601, UTC
     content: str
 
 
@@ -80,8 +82,10 @@ def fetch_github_releases(
         items.append(
             RawItem(
                 source=f"GitHub · {repo}",
+                source_type="OFFICIAL",
                 title=f"{repo} {name}".strip(),
                 url=release.get("html_url") or f"https://github.com/{repo}/releases",
+                published_at=published.isoformat(),
                 content=_clean_text(release.get("body") or "", max_chars),
             )
         )
@@ -125,15 +129,17 @@ def fetch_rss_feeds(
             recent.append((published, entry))
 
         recent.sort(key=lambda pair: pair[0], reverse=True)
-        for _, entry in recent[: feed.max_items or max_items]:
+        for published, entry in recent[: feed.max_items or max_items]:
             content = entry.get("summary") or ""
             if not content and entry.get("content"):
                 content = entry["content"][0].get("value", "")
             items.append(
                 RawItem(
                     source=feed.name,
+                    source_type=feed.type,
                     title=_clean_text(entry.get("title", "Untitled"), 300),
                     url=entry.get("link", str(feed.url)),
+                    published_at=published.isoformat(),
                     content=_clean_text(content, max_chars),
                 )
             )
