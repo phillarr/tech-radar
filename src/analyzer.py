@@ -20,7 +20,7 @@ from src.fetcher import RawItem
 
 logger = logging.getLogger(__name__)
 
-PROMPT_VERSION = "2026-11-14.2"
+PROMPT_VERSION = "2026-11-14.3"
 
 Category = Literal[
     "AI_PRODUCT_MANAGEMENT",
@@ -107,14 +107,17 @@ critical incident still ongoing). CRITICAL must be rare and justified by concret
 vulnerability, major evolution). Something new is not automatically MAJOR.
 - INFO: useful information (release, feature, research, relevant news, resolved incident).
 
-FOR EACH EVENT
+FOR EACH EVENT (be concise: the whole report is read on Slack in a few minutes)
 - title: a neutral headline for the underlying event.
+- facts: at most 3 short statements.
 - summary: what happened, in one or two factual sentences.
 - why_it_matters: one or two sentences on the significance for this reader.
-- product_implications / engineering_implications: short bullet strings; empty if none.
+- product_implications / engineering_implications: at most 2 short strings each; empty if \
+none.
 - recommended_actions: concrete actions proportional to the evidence (type INVESTIGATE, \
-UPGRADE, MITIGATE, MONITOR or DECIDE; timeframe NOW, THIS_WEEK, THIS_MONTH or LATER). \
-Empty if nothing is worth doing.
+UPGRADE, MITIGATE, MONITOR or DECIDE; timeframe NOW, THIS_WEEK, THIS_MONTH or LATER), at \
+most 2. Empty if nothing is worth doing.
+- uncertainties: at most 2 short strings.
 - product_opportunity: one sentence, or null when no credible opportunity exists. Do not \
 force one.
 - sources: every item about this event, with url copied verbatim and role PRIMARY (exactly \
@@ -227,6 +230,7 @@ class AnalysisError(RuntimeError):
 
 
 _PRIORITY_ORDER = {"CRITICAL": 0, "MAJOR": 1, "INFO": 2}
+MAX_OUTPUT_TOKENS = 32000
 CRITICAL_MIN_URGENCY = 80  # CRITICAL means "act now": below this urgency it is demoted
 
 
@@ -243,12 +247,13 @@ def analyze(
     system = SYSTEM_PROMPT_TEMPLATE.format(audience=audience.strip(), max_events=max_events)
 
     try:
-        # messages.create + raw JSON schema (rather than messages.parse) so that the stop
-        # reason can be inspected before the JSON is validated: a refusal or truncation
-        # mid-output would otherwise surface as an opaque JSON parsing error.
-        response = client.messages.create(
+        # Raw JSON schema (rather than messages.parse) so that the stop reason can be
+        # inspected before the JSON is validated: a refusal or truncation mid-output would
+        # otherwise surface as an opaque JSON parsing error. Streamed because a large
+        # max_tokens is refused for non-streaming calls.
+        with client.messages.stream(
             model=model,
-            max_tokens=16000,
+            max_tokens=MAX_OUTPUT_TOKENS,
             system=system,
             output_config={
                 "effort": effort,
@@ -264,7 +269,8 @@ def analyze(
                     ),
                 }
             ],
-        )
+        ) as stream:
+            response = stream.get_final_message()
     except anthropic.RateLimitError as exc:
         raise AnalysisError(f"Anthropic rate limit hit: {exc}") from exc
     except anthropic.APIStatusError as exc:
@@ -278,12 +284,14 @@ def analyze(
         response.usage.input_tokens,
         response.usage.output_tokens,
     )
+    text = next((b.text for b in response.content if b.type == "text"), "")
     if response.stop_reason == "refusal":
         raise AnalysisError(f"Model refused the request: {response.stop_details}")
     if response.stop_reason == "max_tokens":
-        raise AnalysisError("Model output was truncated (max_tokens reached)")
-
-    text = next((b.text for b in response.content if b.type == "text"), "")
+        raise AnalysisError(
+            f"Model output was truncated at {MAX_OUTPUT_TOKENS} tokens; "
+            f"{len(text)} chars, ends with: {text[-600:]!r}"
+        )
     try:
         output = AnalysisOutput.model_validate_json(text)
     except ValidationError as exc:
