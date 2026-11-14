@@ -1,4 +1,4 @@
-"""Pipeline orchestrator: config -> fetch -> analyze -> notify.
+"""Pipeline orchestrator: config -> fetch -> store -> dedupe -> analyze -> notify -> store.
 
 Run from the project root with:  python -m src.main
 """
@@ -16,6 +16,7 @@ from src.analyzer import DailyReport, analyze
 from src.config_loader import load_all
 from src.fetcher import fetch_all
 from src.notifier import send_to_slack
+from src.storage import Storage, filter_already_published
 
 logger = logging.getLogger("tech_watch")
 
@@ -24,9 +25,22 @@ def run() -> int:
     secrets, config = load_all()
     settings = config.settings
 
-    items = fetch_all(config, github_token=secrets.github_token)
+    items, health = fetch_all(config, github_token=secrets.github_token)
+
+    store = Storage.connect(secrets.supabase_url, secrets.supabase_service_key)
+    if store:
+        store.record_sources(health)
+        store.record_articles(items)
+        published = store.published_hashes()
+        if published is not None:
+            items, dropped, updates = filter_already_published(items, published)
+            logger.info(
+                "History: %d item(s) already published and unchanged, %d update(s) of "
+                "published items", dropped, updates,
+            )
+
     if not items:
-        logger.info("No items in the last %dh; skipping the LLM call.", settings.hours_lookback)
+        logger.info("No new items; skipping the LLM call.")
         if settings.post_when_empty:
             empty = DailyReport(
                 intro="Quiet morning: no new updates from tracked sources.", events=[], signals=[]
@@ -47,12 +61,17 @@ def run() -> int:
         "Analysis kept %d event(s) covering %d of %d item(s), %d signal(s)",
         len(report.events), covered, len(items), len(report.signals),
     )
+    analysis_id = store.record_analysis(report, len(items), secrets.dry_run) if store else None
 
     if not report.events and not settings.post_when_empty:
         logger.info("No actionable events; nothing posted.")
+        if store:
+            store.record_outcome(items, report, None, posted=False)  # nothing distributed
         return 0
 
     send_to_slack(report, secrets.slack_webhook_url, secrets.dry_run, settings.timezone)
+    if store:
+        store.record_outcome(items, report, analysis_id, posted=not secrets.dry_run)
     return 0
 
 

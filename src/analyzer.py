@@ -20,7 +20,7 @@ from src.fetcher import RawItem
 
 logger = logging.getLogger(__name__)
 
-PROMPT_VERSION = "2026-11-14.1"
+PROMPT_VERSION = "2026-11-14.2"
 
 Category = Literal[
     "AI_PRODUCT_MANAGEMENT",
@@ -75,7 +75,10 @@ goes in why_it_matters and the implications; never present speculation as confir
 technological, product, business or security implications for this reader. Dismiss \
 marketing copy, generic tutorials, listicles and scheduled maintenance.
 4. Deduplication. Items describing the same underlying event form ONE event that lists \
-all of them in sources. Never put the same url in two events.
+all of them in sources. Never put the same url in two events. An item marked \
+"update": true was already covered in a previous digest and its content has changed since: \
+keep it only if the change is substantial (incident resolved or escalated, new severity, \
+new facts), and say in the summary what changed.
 5. Source quality. Each item has a source_type: OFFICIAL (the company, project, lab or \
 regulator itself), MEDIA (third-party reporting), RESEARCH, COMMUNITY (forums, \
 aggregators, individual blogs). When an OFFICIAL item exists for an event, it is the \
@@ -213,6 +216,9 @@ class DailyReport(BaseModel):
     signals: List[Signal]
     source_names: Dict[str, str] = Field(default_factory=dict)  # signal url -> source name
     model: str = ""
+    stop_reason: str = ""
+    input_tokens: int = 0
+    output_tokens: int = 0
     prompt_version: str = PROMPT_VERSION
 
 
@@ -291,6 +297,9 @@ def analyze(
     )
     report = postprocess(output, items, max_events)
     report.model = model
+    report.stop_reason = response.stop_reason or ""
+    report.input_tokens = response.usage.input_tokens
+    report.output_tokens = response.usage.output_tokens
     return report
 
 

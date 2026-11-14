@@ -61,6 +61,8 @@ class EnvSecrets(BaseSettings):
     anthropic_api_key: str
     slack_webhook_url: str
     github_token: Optional[str] = None
+    supabase_url: Optional[str] = None  # storage is optional: unset means no history
+    supabase_service_key: Optional[str] = None
     config_path: str = "config/sources.json"
     dry_run: bool = False
 
