@@ -15,6 +15,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 class RSSSource(BaseModel):
     name: str
     url: HttpUrl
+    max_items: Optional[int] = Field(default=None, gt=0)  # overrides settings.max_items_per_source
 
 
 class SourcesConfig(BaseModel):

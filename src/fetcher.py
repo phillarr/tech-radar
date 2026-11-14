@@ -125,7 +125,7 @@ def fetch_rss_feeds(
             recent.append((published, entry))
 
         recent.sort(key=lambda pair: pair[0], reverse=True)
-        for _, entry in recent[:max_items]:
+        for _, entry in recent[: feed.max_items or max_items]:
             content = entry.get("summary") or ""
             if not content and entry.get("content"):
                 content = entry["content"][0].get("value", "")

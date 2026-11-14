@@ -63,6 +63,15 @@
       {
         "name": "Status · Cloudflare",
         "url": "https://www.cloudflarestatus.com/history.rss"
+      },
+      {
+        "name": "Status · Azure",
+        "url": "https://rssfeed.azure.status.microsoft/en-us/status/feed/"
+      },
+      {
+        "name": "BleepingComputer (outages & security)",
+        "url": "https://www.bleepingcomputer.com/feed/",
+        "max_items": 15
       }
     ]
   }
