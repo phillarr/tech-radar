@@ -44,6 +44,14 @@ DEGRADED or INACTIVE, and never re-posts an article already published in the las
 14 days unless its content changed (for example an incident moving to resolved).
 Storage is best effort: if Supabase is unavailable, the digest is still sent.
 
+**Weekly Radar.** Every Monday morning, a second workflow reads back the events of the
+daily digests posted the previous week (Monday to Sunday, Paris time) and asks Claude for
+a short synthesis: the top stories, the themes that connect several of them, and a
+"Worth reading" section picked from analysis outlets listed in `reading_feeds` (Harvard
+Business Review by default), clearly separated from the news. Claude may only reference
+stored events and reading-feed links; counts, titles, links and evidence statuses come
+from storage. The Weekly Radar requires Supabase.
+
 ## Setup
 
 ### 1. Secrets
@@ -73,7 +81,8 @@ Everything is configured in [`config/sources.json`](config/sources.json):
   of events, display timezone, and the `audience` description the analysis is written for;
 - `sources.github_repositories`: repositories whose latest release is tracked;
 - `sources.rss_feeds`: feeds with a `type` of `OFFICIAL`, `MEDIA`, `RESEARCH` or
-  `COMMUNITY`, which drives source attribution and evidence status.
+  `COMMUNITY`, which drives source attribution and evidence status;
+- `sources.reading_feeds`: analysis and commentary feeds, used only by the Weekly Radar.
 
 ## Running
 
@@ -89,6 +98,15 @@ gh workflow run daily-watch.yml                   # post to Slack
 ```
 
 A dry run never marks articles as published.
+
+The Weekly Radar runs from [`.github/workflows/weekly-radar.yml`](.github/workflows/weekly-radar.yml)
+on Mondays around 08:37 Paris time. A manual run covers the last seven days up to now and
+is a dry run by default:
+
+```bash
+gh workflow run weekly-radar.yml                    # print the payload in the logs
+gh workflow run weekly-radar.yml -f dry_run=false   # post to Slack
+```
 
 ### Locally
 
@@ -120,6 +138,7 @@ src/fetcher.py             RSS and GitHub ingestion, per-source health
 src/analyzer.py            prompt, output contract, Claude call, validation rules
 src/notifier.py            Slack message
 src/storage.py             Supabase client and cross-day deduplication
+src/weekly.py              Weekly Radar
 src/main.py                pipeline
 tests/                     unit tests
 ```
@@ -127,9 +146,5 @@ tests/                     unit tests
 ## Roadmap
 
 - Collection every 6 hours, with the morning digest built from the accumulated articles
-- Weekly Radar on Mondays, built from the stored history, with a separate "Worth reading"
-  section for analysis sources such as Harvard Business Review
-  (`http://feeds.hbr.org/harvardbusiness`), kept out of the daily digest because they
-  publish commentary rather than news
 - Reader feedback (👍 ➖ ⚠️) through a Slack app
 - Watchlists for topics to follow closely

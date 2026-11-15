@@ -64,6 +64,9 @@
       { "name": "Status · GitHub", "url": "https://www.githubstatus.com/history.rss", "type": "OFFICIAL" },
       { "name": "Status · Cloudflare", "url": "https://www.cloudflarestatus.com/history.rss", "type": "OFFICIAL" },
       { "name": "Status · Azure", "url": "https://rssfeed.azure.status.microsoft/en-us/status/feed/", "type": "OFFICIAL" }
+    ],
+    "reading_feeds": [
+      { "name": "Harvard Business Review", "url": "http://feeds.hbr.org/harvardbusiness", "type": "MEDIA", "max_items": 30 }
     ]
   }
 }

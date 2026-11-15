@@ -214,12 +214,51 @@ class Storage:
     # --- Analysis and distribution -----------------------------------------------------------
 
     @_best_effort
-    def posted_since(self, since: datetime) -> bool:
+    def posted_since(self, since: datetime, channel: str = "slack") -> bool:
         rows = self._request("GET", "distributions", params={
-            "select": "id", "status": "eq.POSTED",
+            "select": "id", "status": "eq.POSTED", "channel": f"eq.{channel}",
             "created_at": f"gte.{since.astimezone(timezone.utc).isoformat()}", "limit": "1",
         }) or []
         return bool(rows)
+
+    @_best_effort
+    def week_events(self, start: datetime, end: datetime) -> List[Dict[str, Any]]:
+        """Events of the daily digests posted in [start, end), oldest first."""
+        dists = self._request("GET", "distributions", params={
+            "select": "analysis_id,created_at", "channel": "eq.slack", "status": "eq.POSTED",
+            "and": f"(created_at.gte.{start.astimezone(timezone.utc).isoformat()},"
+                   f"created_at.lt.{end.astimezone(timezone.utc).isoformat()})",
+            "order": "created_at.asc",
+        }) or []
+        posted_on = {d["analysis_id"]: d["created_at"] for d in dists}
+        if not posted_on:
+            return []
+        rows = self._request("GET", "events", params={
+            "select": "analysis_id,payload",
+            "analysis_id": f"in.({','.join(posted_on)})",
+        }) or []
+        events = [{**r["payload"], "posted_at": posted_on[r["analysis_id"]]} for r in rows]
+        return sorted(events, key=lambda e: (e["posted_at"], e["event_id"]))
+
+    @_best_effort
+    def record_weekly(self, report: "Any", events_in: int, dry_run: bool) -> None:
+        rows = self._insert("analyses", [{
+            "model": report.model,
+            "prompt_version": report.prompt_version,
+            "stop_reason": report.stop_reason,
+            "input_tokens": report.input_tokens,
+            "output_tokens": report.output_tokens,
+            "items_in": events_in,
+            "events_out": len(report.top_stories),
+            "signals_out": len(report.themes),
+            "dry_run": dry_run,
+        }], returning=True)
+        self._insert("distributions", [{
+            "analysis_id": rows[0]["id"],
+            "channel": "slack_weekly",
+            "status": "DRY_RUN" if dry_run else "POSTED",
+            "event_ids": [t.event_id for t in report.top_stories],
+        }])
 
     @_best_effort
     def record_analysis(self, report: DailyReport, items_in: int, dry_run: bool) -> Optional[str]:

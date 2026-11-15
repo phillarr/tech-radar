@@ -26,6 +26,8 @@ class RSSSource(BaseModel):
 class SourcesConfig(BaseModel):
     github_repositories: List[str] = Field(default_factory=list)
     rss_feeds: List[RSSSource] = Field(default_factory=list)
+    # Analysis and commentary, used only by the Weekly Radar's "Worth reading" section.
+    reading_feeds: List[RSSSource] = Field(default_factory=list)
 
     @field_validator("github_repositories")
     @classmethod

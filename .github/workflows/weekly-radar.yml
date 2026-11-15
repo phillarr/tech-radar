@@ -1,0 +1,73 @@
+name: Weekly Radar
+
+on:
+  schedule:
+    # Mondays, after the daily digest: around 08:37 Europe/Paris and later slots in case
+    # GitHub delays or drops a run. The agent skips the run when this week's radar was
+    # already posted (Supabase).
+    - cron: '37 6 * * 1'
+    - cron: '37 7 * * 1'
+    - cron: '37 8 * * 1'
+    - cron: '37 9 * * 1'
+  workflow_dispatch:      # Manual trigger: covers the last 7 days up to now
+    inputs:
+      dry_run:
+        description: 'Print the Slack payload in the logs instead of posting it'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly-radar
+  cancel-in-progress: false
+
+jobs:
+  run-radar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Keep scheduled runs in the Monday 08:00-11:59 Europe/Paris window
+        id: gate
+        run: |
+          hour=$(TZ=Europe/Paris date +%H)
+          day=$(TZ=Europe/Paris date +%u)
+          if [ "${{ github.event_name }}" = "schedule" ] && { [ "$day" != "1" ] || [ "$hour" -lt 8 ] || [ "$hour" -ge 12 ]; }; then
+            echo "Paris time is day ${day}, ${hour}h, outside the Monday morning window: skipping."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out repository
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run non-regression tests
+        if: steps.gate.outputs.run == 'true'
+        run: python -m unittest discover tests
+
+      - name: Execute Weekly Radar
+        if: steps.gate.outputs.run == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+          SCHEDULED: ${{ github.event_name == 'schedule' }}
+        run: python -m src.weekly
