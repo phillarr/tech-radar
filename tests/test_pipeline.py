@@ -129,6 +129,15 @@ class TraceabilityTests(unittest.TestCase):
                             evidence_status="CONFIRMED")])
         self.assertEqual(report.events[0].evidence_status, "REPORTED")
 
+    def test_unverified_events_are_dropped(self):
+        report = run([
+            event("Rumor", [("https://techcrunch.com/langchain-3b", "PRIMARY")],
+                  evidence_status="UNVERIFIED"),
+            event("ChatGPT Wallet",
+                  [("https://openai.com/index/introducing-chatgpt-wallet", "PRIMARY")]),
+        ])
+        self.assertEqual([e.title for e in report.events], ["ChatGPT Wallet"])
+
 
 class PriorityTests(unittest.TestCase):
     def test_critical_with_low_urgency_is_demoted(self):

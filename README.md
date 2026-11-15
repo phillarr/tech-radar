@@ -34,6 +34,7 @@ code, not left to the model:
 - source names and types come from the configuration, not from the model;
 - exactly one PRIMARY source per event, an official one when available;
 - CONFIRMED requires an official source, otherwise the event is REPORTED;
+- UNVERIFIED events (thin or contradictory claims) are left out of the digest;
 - CRITICAL requires an urgency of at least 80, otherwise it is demoted to MAJOR;
 - a signal needs at least two known items as evidence.
 
