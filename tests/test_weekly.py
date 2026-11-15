@@ -74,6 +74,7 @@ class WindowTests(unittest.TestCase):
         start, end = week_window(now, "Europe/Paris", calendar_week=False)
         self.assertEqual((end - start).days, 7)
         self.assertEqual(end, now)
+        self.assertTrue(week_label(start, end, calendar_week=False).startswith("Last 7 days"))
 
 
 class ValidationTests(unittest.TestCase):

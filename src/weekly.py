@@ -162,10 +162,14 @@ def week_window(now: datetime, tz_name: str, calendar_week: bool) -> Tuple[datet
     return end - timedelta(days=7), end
 
 
-def week_label(start: datetime, end: datetime) -> str:
+def week_label(start: datetime, end: datetime, calendar_week: bool = True) -> str:
     last = end - timedelta(seconds=1)
-    week = start.isocalendar().week
-    return f"Week {week} · {start.strftime('%d %b')} – {last.strftime('%d %b %Y')}"
+    span = f"{start.strftime('%d %b')} – {last.strftime('%d %b %Y')}"
+    return f"Week {start.isocalendar().week} · {span}" if calendar_week else f"Last 7 days · {span}"
+
+
+def _plural(n: int, word: str) -> str:
+    return f"{n} {word}{'' if n == 1 else 's'}"
 
 
 def compute_stats(events: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -305,7 +309,8 @@ def build_weekly_payload(report: WeeklyReport) -> Dict[str, Any]:
         {"type": "header", "text": {"type": "plain_text",
                                     "text": f"🗓️ Weekly Radar — {report.week_label}"}},
         _section(f"*The week in brief*\n{_escape(report.intro)}"),
-        _context(f"{st.get('events', 0)} events in {st.get('digests', 0)} digests · "
+        _context(f"{_plural(st.get('events', 0), 'event')} in "
+                 f"{_plural(st.get('digests', 0), 'digest')} · "
                  f"{st.get('confirmed', 0)} ✅ confirmed   {counts}"),
     ]
     if top_categories:
@@ -375,8 +380,12 @@ def run(now: Optional[datetime] = None) -> int:
     if events is None:
         logger.error("Could not read the week's events from Supabase.")
         return 1
-    label = week_label(start, end)
-    logger.info("%s: %d event(s) from posted digests", label, len(events))
+    label = week_label(start, end, calendar_week=secrets.scheduled)
+    # Apply today's policy to older digests too: no unverified claims in the radar.
+    unverified = [e for e in events if e["evidence_status"] == "UNVERIFIED"]
+    events = [e for e in events if e["evidence_status"] != "UNVERIFIED"]
+    logger.info("%s: %d event(s) from posted digests (%d unverified left out)",
+                label, len(events), len(unverified))
     if not events:
         logger.info("No digest was posted in this window; nothing to synthesize.")
         return 0

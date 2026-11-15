@@ -226,5 +226,13 @@ class SlackRenderingTests(unittest.TestCase):
         self.assertIn("|Status · Claude>", self.text)  # signal evidence labelled by source
 
 
+class FetcherTests(unittest.TestCase):
+    def test_relative_feed_links_are_resolved_against_the_site(self):
+        from src.fetcher import _absolute
+
+        self.assertEqual(_absolute("/2026/11/x", "http://hbr.org"), "http://hbr.org/2026/11/x")
+        self.assertEqual(_absolute("https://a.com/b", "http://hbr.org"), "https://a.com/b")
+
+
 if __name__ == "__main__":
     unittest.main()

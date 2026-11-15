@@ -7,6 +7,7 @@ import logging
 import re
 from datetime import datetime, timedelta, timezone
 from html import unescape
+from urllib.parse import urljoin, urlparse
 from typing import List, NotRequired, Optional, Tuple, TypedDict
 
 import feedparser
@@ -51,6 +52,11 @@ def _health(name, url, kind, type_, ok=True, error=None, items=0, last=None) -> 
 def _clean_text(text: str, max_chars: int) -> str:
     text = _WS_RE.sub(" ", unescape(_TAG_RE.sub(" ", text or ""))).strip()
     return text if len(text) <= max_chars else text[:max_chars].rstrip() + "…"
+
+
+def _absolute(link: str, site: str) -> str:
+    """Some feeds (e.g. HBR) give site-relative links: resolve them against the site."""
+    return link if urlparse(link).scheme else urljoin(site, link)
 
 
 def _parse_iso8601(value: Optional[str]) -> Optional[datetime]:
@@ -155,6 +161,7 @@ def fetch_rss_feeds(
         newest = max((d for d, _ in dated), default=None)
         health.append(_health(feed.name, feed_url, "rss", feed.type, items=len(selected), last=newest))
 
+        site = parsed.feed.get("link") or feed_url
         for published, entry in selected:
             content = entry.get("summary") or ""
             if not content and entry.get("content"):
@@ -164,7 +171,7 @@ def fetch_rss_feeds(
                     source=feed.name,
                     source_type=feed.type,
                     title=_clean_text(entry.get("title", "Untitled"), 300),
-                    url=entry.get("link", str(feed.url)),
+                    url=_absolute(entry.get("link") or feed_url, site),
                     published_at=published.isoformat(),
                     content=_clean_text(content, max_chars),
                 )
