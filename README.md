@@ -1,7 +1,7 @@
 # Tech Radar
 
 An autonomous technology intelligence agent. Every morning it collects news from about
-40 official, media, research and community sources, asks Claude to turn them into a short
+50 official, media, research and community sources, asks Claude to turn them into a short
 set of evidence-based events and signals, and posts the digest to Slack.
 
 It covers AI product management, AI engineering, cloud and infrastructure,
