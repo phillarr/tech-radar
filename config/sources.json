@@ -49,11 +49,6 @@
       { "name": "Le Monde Informatique", "url": "https://www.lemondeinformatique.fr/flux-rss/thematique/toute-l-actualite/rss.xml", "type": "MEDIA" },
       { "name": "ZDNET France", "url": "https://www.zdnet.fr/feeds/rss/actualites/", "type": "MEDIA" },
 
-      { "name": "Simon Willison (LLMs)", "url": "https://simonwillison.net/atom/everything/", "type": "COMMUNITY" },
-      { "name": "Hacker News - Best", "url": "https://hnrss.org/best", "type": "COMMUNITY" },
-      { "name": "Hacker News - 200+ points", "url": "https://hnrss.org/newest?points=200", "type": "COMMUNITY" },
-      { "name": "Lobsters", "url": "https://lobste.rs/rss", "type": "COMMUNITY" },
-
       { "name": "CISA Alerts", "url": "https://www.cisa.gov/cybersecurity-advisories/alerts.xml", "type": "OFFICIAL" },
       { "name": "CERT-FR Alertes", "url": "https://www.cert.ssi.gouv.fr/alerte/feed/", "type": "OFFICIAL" },
       { "name": "FBI IC3 Public Service Announcements", "url": "https://www.ic3.gov/PSA/RSS", "type": "OFFICIAL" },
