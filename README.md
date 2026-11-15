@@ -127,6 +127,9 @@ tests/                     unit tests
 ## Roadmap
 
 - Collection every 6 hours, with the morning digest built from the accumulated articles
-- Weekly Radar on Mondays, built from the stored history
+- Weekly Radar on Mondays, built from the stored history, with a separate "Worth reading"
+  section for analysis sources such as Harvard Business Review
+  (`http://feeds.hbr.org/harvardbusiness`), kept out of the daily digest because they
+  publish commentary rather than news
 - Reader feedback (👍 ➖ ⚠️) through a Slack app
 - Watchlists for topics to follow closely
