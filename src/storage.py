@@ -214,6 +214,14 @@ class Storage:
     # --- Analysis and distribution -----------------------------------------------------------
 
     @_best_effort
+    def posted_since(self, since: datetime) -> bool:
+        rows = self._request("GET", "distributions", params={
+            "select": "id", "status": "eq.POSTED",
+            "created_at": f"gte.{since.astimezone(timezone.utc).isoformat()}", "limit": "1",
+        }) or []
+        return bool(rows)
+
+    @_best_effort
     def record_analysis(self, report: DailyReport, items_in: int, dry_run: bool) -> Optional[str]:
         rows = self._insert("analyses", [{
             "model": report.model,

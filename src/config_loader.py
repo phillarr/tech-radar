@@ -65,6 +65,7 @@ class EnvSecrets(BaseSettings):
     supabase_service_key: Optional[str] = None
     config_path: str = "config/sources.json"
     dry_run: bool = False
+    scheduled: bool = False  # true for cron runs: at most one digest per day
 
 
 def resolve_config_path(config_path: str) -> Path:

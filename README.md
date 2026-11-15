@@ -77,8 +77,10 @@ Everything is configured in [`config/sources.json`](config/sources.json):
 ## Running
 
 The workflow [`.github/workflows/daily-watch.yml`](.github/workflows/daily-watch.yml)
-runs every day at 08:00 Europe/Paris (two UTC crons plus a gate step to follow daylight
-saving time). It can also be started by hand from the Actions tab or with:
+runs every day around 08:00 Europe/Paris. GitHub can delay or drop scheduled runs, so
+several crons fire between 08:00 and 11:59 Paris time (whatever the daylight saving
+period); the first one posts the digest and the others stop early when Supabase shows it
+was already posted today. It can also be started by hand from the Actions tab or with:
 
 ```bash
 gh workflow run daily-watch.yml -f dry_run=true   # print the Slack payload in the logs

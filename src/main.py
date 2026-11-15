@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 if __package__ in (None, ""):  # allow `python src/main.py` as well
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -25,9 +27,16 @@ def run() -> int:
     secrets, config = load_all()
     settings = config.settings
 
-    items, health = fetch_all(config, github_token=secrets.github_token)
-
     store = Storage.connect(secrets.supabase_url, secrets.supabase_service_key)
+    if store and secrets.scheduled and not secrets.dry_run:
+        midnight = datetime.now(ZoneInfo(settings.timezone)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        if store.posted_since(midnight):
+            logger.info("Today's digest was already posted; nothing to do.")
+            return 0
+
+    items, health = fetch_all(config, github_token=secrets.github_token)
     if store:
         store.record_sources(health)
         store.record_articles(items)

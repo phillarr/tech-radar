@@ -2,10 +2,14 @@ name: Daily Tech Watch Agent
 
 on:
   schedule:
-    # 08:00 Europe/Paris is 06:00 UTC in summer and 07:00 UTC in winter. Both crons fire;
-    # the first step skips the run that does not fall in the 08:00 Paris hour.
-    - cron: '0 6 * * *'
-    - cron: '0 7 * * *'
+    # Target: 08:00 Europe/Paris (06:00 UTC in summer, 07:00 UTC in winter). GitHub may
+    # delay or drop scheduled runs, so several slots fire (off the top of the hour, which
+    # is the busiest time). The gate keeps runs between 08:00 and 11:59 Paris time, and
+    # the agent skips the run when today's digest was already posted (Supabase).
+    - cron: '7 6 * * *'
+    - cron: '7 7 * * *'
+    - cron: '7 8 * * *'
+    - cron: '7 9 * * *'
   workflow_dispatch:      # Manual trigger for testing
     inputs:
       dry_run:
@@ -25,12 +29,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Keep only the 08:00 Europe/Paris run
+      - name: Keep scheduled runs in the 08:00-11:59 Europe/Paris window
         id: gate
         run: |
           hour=$(TZ=Europe/Paris date +%H)
-          if [ "${{ github.event_name }}" = "schedule" ] && [ "$hour" != "08" ]; then
-            echo "Paris time is ${hour}h, not the 08:00 slot: skipping."
+          if [ "${{ github.event_name }}" = "schedule" ] && { [ "$hour" -lt 8 ] || [ "$hour" -ge 12 ]; }; then
+            echo "Paris time is ${hour}h, outside the morning window: skipping."
             echo "run=false" >> "$GITHUB_OUTPUT"
           else
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -66,4 +70,5 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           DRY_RUN: ${{ inputs.dry_run || false }}
+          SCHEDULED: ${{ github.event_name == 'schedule' }}
         run: python -m src.main

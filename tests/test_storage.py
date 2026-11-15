@@ -126,6 +126,25 @@ class StorageRowTests(unittest.TestCase):
                          "https://openai.com/index/introducing-chatgpt-wallet")
         self.assertEqual(events[0]["payload"]["event_id"], "evt_20261114_001")
 
+    def test_posted_since_queries_posted_distributions_in_utc(self):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        store = FakeStorage()
+        store.calls_params = []
+        original = store._request
+
+        def capture(method, table, params=None, body=None, prefer=None):
+            store.calls_params.append(params)
+            return [{"id": 1}]
+
+        store._request = capture
+        midnight = datetime(2026, 11, 15, tzinfo=ZoneInfo("Europe/Paris"))
+        self.assertTrue(store.posted_since(midnight))
+        params = store.calls_params[0]
+        self.assertEqual(params["status"], "eq.POSTED")
+        self.assertEqual(params["created_at"], "gte.2026-11-14T23:00:00+00:00")
+
 
 if __name__ == "__main__":
     unittest.main()
