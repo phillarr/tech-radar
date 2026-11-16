@@ -1,17 +1,9 @@
 name: Daily Tech Watch Agent
 
 on:
-  schedule:
-    # Target: 08:00 Europe/Paris (06:00 UTC in summer, 07:00 UTC in winter). GitHub may
-    # delay or drop scheduled runs, so several slots fire (off the top of the hour, which
-    # is the busiest time). The gate keeps runs between 08:00 and 11:59 Paris time, and
-    # the agent skips the run when today's digest was already posted (Supabase).
-    - cron: '7 6 * * *'
-    - cron: '7 7 * * *'
-    - cron: '7 8 * * *'
-    - cron: '7 9 * * *'
-  # Also started every morning by Supabase (pg_cron + pg_net, see db/scheduler.sql), which
-  # is more punctual than GitHub's cron; it passes scheduled=true.
+  # Started every morning by Supabase (pg_cron + pg_net, see db/scheduler.sql) with
+  # scheduled=true; GitHub's own cron is not used because it delays or drops runs.
+  # Scheduled runs only post between 08:00 and 11:59 Paris time, once per day.
   workflow_dispatch:      # Manual trigger for testing
     inputs:
       dry_run:

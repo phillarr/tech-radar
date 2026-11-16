@@ -93,11 +93,10 @@ Everything is configured in [`config/sources.json`](config/sources.json):
 ## Running
 
 The workflow [`.github/workflows/daily-watch.yml`](.github/workflows/daily-watch.yml)
-runs every day around 08:00 Europe/Paris. GitHub can delay or drop scheduled runs, so
-it is started by Supabase (`db/scheduler.sql`, with `scheduled=true`), and several GitHub
-crons fire between 08:00 and 11:59 Paris time as a fallback (whatever the daylight saving
-period); the first run posts the digest and the others stop early when Supabase shows it
-was already posted today. It can also be started by hand from the Actions tab or with:
+runs every day around 08:00 Europe/Paris. It is started by Supabase (`db/scheduler.sql`,
+with `scheduled=true`) rather than GitHub's cron, which can delay or drop scheduled runs.
+A scheduled run only posts between 08:00 and 11:59 Paris time, and stops early when
+Supabase shows today's digest was already posted. It can also be started by hand from the Actions tab or with:
 
 ```bash
 gh workflow run daily-watch.yml -f dry_run=true   # print the Slack payload in the logs
@@ -107,7 +106,7 @@ gh workflow run daily-watch.yml                   # post to Slack
 A dry run never marks articles as published.
 
 The Weekly Radar runs from [`.github/workflows/weekly-radar.yml`](.github/workflows/weekly-radar.yml)
-on Mondays around 08:37 Paris time. A manual run covers the last seven days up to now and
+on Mondays around 08:45 Paris time, also started by Supabase. A manual run covers the last seven days up to now and
 is a dry run by default:
 
 ```bash

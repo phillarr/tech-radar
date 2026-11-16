@@ -1,9 +1,8 @@
 -- Reliable scheduler: Supabase starts the GitHub workflows every morning.
 --
--- GitHub's own cron is best effort and can delay or skip runs, so pg_cron calls the
--- GitHub API (workflow_dispatch) at a fixed time. The workflows' crons stay as a fallback;
--- the agent posts at most one digest per day and one radar per week, so extra runs stop
--- early.
+-- GitHub's own cron is best effort and can delay or skip runs, so the workflows have no
+-- cron of their own: pg_cron calls the GitHub API (workflow_dispatch) at a fixed time.
+-- The agent posts at most one digest per day and one radar per week.
 --
 -- Before running this file, store a fine-grained GitHub token (repository tech-radar
 -- only, permission "Actions: Read and write") in the Vault, once, in a separate query:

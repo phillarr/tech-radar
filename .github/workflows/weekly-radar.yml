@@ -1,16 +1,9 @@
 name: Weekly Radar
 
 on:
-  schedule:
-    # Mondays, after the daily digest: around 08:37 Europe/Paris and later slots in case
-    # GitHub delays or drops a run. The agent skips the run when this week's radar was
-    # already posted (Supabase).
-    - cron: '37 6 * * 1'
-    - cron: '37 7 * * 1'
-    - cron: '37 8 * * 1'
-    - cron: '37 9 * * 1'
-  # Also started on Mondays by Supabase (pg_cron + pg_net, see db/scheduler.sql) with
-  # scheduled=true and dry_run=false.
+  # Started on Mondays, after the daily digest, by Supabase (pg_cron + pg_net, see
+  # db/scheduler.sql) with scheduled=true and dry_run=false; GitHub's own cron is not
+  # used. Scheduled runs only post on Monday 08:00-11:59 Paris time, once per week.
   workflow_dispatch:      # Manual trigger: covers the last 7 days up to now
     inputs:
       dry_run:
