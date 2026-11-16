@@ -10,10 +10,16 @@ on:
     - cron: '7 7 * * *'
     - cron: '7 8 * * *'
     - cron: '7 9 * * *'
+  # Also started every morning by Supabase (pg_cron + pg_net, see db/scheduler.sql), which
+  # is more punctual than GitHub's cron; it passes scheduled=true.
   workflow_dispatch:      # Manual trigger for testing
     inputs:
       dry_run:
         description: 'Print the Slack payload in the logs instead of posting it'
+        type: boolean
+        default: false
+      scheduled:
+        description: 'Treat as a scheduled run (morning window, one post per period). Used by the Supabase scheduler.'
         type: boolean
         default: false
 
@@ -31,9 +37,11 @@ jobs:
     steps:
       - name: Keep scheduled runs in the 08:00-11:59 Europe/Paris window
         id: gate
+        env:
+          SCHEDULED: ${{ github.event_name == 'schedule' || inputs.scheduled == true }}
         run: |
           hour=$(TZ=Europe/Paris date +%H)
-          if [ "${{ github.event_name }}" = "schedule" ] && { [ "$hour" -lt 8 ] || [ "$hour" -ge 12 ]; }; then
+          if [ "$SCHEDULED" = "true" ] && { [ "$hour" -lt 8 ] || [ "$hour" -ge 12 ]; }; then
             echo "Paris time is ${hour}h, outside the morning window: skipping."
             echo "run=false" >> "$GITHUB_OUTPUT"
           else
@@ -70,5 +78,5 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           DRY_RUN: ${{ inputs.dry_run || false }}
-          SCHEDULED: ${{ github.event_name == 'schedule' }}
+          SCHEDULED: ${{ github.event_name == 'schedule' || inputs.scheduled == true }}
         run: python -m src.main

@@ -9,12 +9,18 @@ on:
     - cron: '37 7 * * 1'
     - cron: '37 8 * * 1'
     - cron: '37 9 * * 1'
+  # Also started on Mondays by Supabase (pg_cron + pg_net, see db/scheduler.sql) with
+  # scheduled=true and dry_run=false.
   workflow_dispatch:      # Manual trigger: covers the last 7 days up to now
     inputs:
       dry_run:
         description: 'Print the Slack payload in the logs instead of posting it'
         type: boolean
         default: true
+      scheduled:
+        description: 'Treat as a scheduled run (morning window, one post per period). Used by the Supabase scheduler.'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -30,10 +36,12 @@ jobs:
     steps:
       - name: Keep scheduled runs in the Monday 08:00-11:59 Europe/Paris window
         id: gate
+        env:
+          SCHEDULED: ${{ github.event_name == 'schedule' || inputs.scheduled == true }}
         run: |
           hour=$(TZ=Europe/Paris date +%H)
           day=$(TZ=Europe/Paris date +%u)
-          if [ "${{ github.event_name }}" = "schedule" ] && { [ "$day" != "1" ] || [ "$hour" -lt 8 ] || [ "$hour" -ge 12 ]; }; then
+          if [ "$SCHEDULED" = "true" ] && { [ "$day" != "1" ] || [ "$hour" -lt 8 ] || [ "$hour" -ge 12 ]; }; then
             echo "Paris time is day ${day}, ${hour}h, outside the Monday morning window: skipping."
             echo "run=false" >> "$GITHUB_OUTPUT"
           else
@@ -69,5 +77,5 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
-          SCHEDULED: ${{ github.event_name == 'schedule' }}
+          SCHEDULED: ${{ github.event_name == 'schedule' || inputs.scheduled == true }}
         run: python -m src.weekly

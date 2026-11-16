@@ -73,6 +73,12 @@ Create a Supabase project, open the SQL Editor and run [`db/schema.sql`](db/sche
 once. Row Level Security is enabled on every table with no policy, so only the secret
 key can read or write.
 
+To make the schedule reliable, also run [`db/scheduler.sql`](db/scheduler.sql): Supabase
+(`pg_cron` + `pg_net`) then starts the daily workflow at 07:05 UTC and the Weekly Radar
+on Mondays at 07:45 UTC through the GitHub API. It needs a fine-grained GitHub token
+limited to this repository with the "Actions: Read and write" permission, stored in the
+Supabase Vault as `github_dispatch_token` (instructions at the top of the file).
+
 ### 3. Sources and settings
 
 Everything is configured in [`config/sources.json`](config/sources.json):
@@ -88,8 +94,9 @@ Everything is configured in [`config/sources.json`](config/sources.json):
 
 The workflow [`.github/workflows/daily-watch.yml`](.github/workflows/daily-watch.yml)
 runs every day around 08:00 Europe/Paris. GitHub can delay or drop scheduled runs, so
-several crons fire between 08:00 and 11:59 Paris time (whatever the daylight saving
-period); the first one posts the digest and the others stop early when Supabase shows it
+it is started by Supabase (`db/scheduler.sql`, with `scheduled=true`), and several GitHub
+crons fire between 08:00 and 11:59 Paris time as a fallback (whatever the daylight saving
+period); the first run posts the digest and the others stop early when Supabase shows it
 was already posted today. It can also be started by hand from the Actions tab or with:
 
 ```bash
@@ -133,6 +140,7 @@ and the rows written to Supabase. They also run in CI before each digest.
 ```
 config/sources.json        sources and settings
 db/schema.sql              Supabase schema
+db/scheduler.sql           Supabase scheduler (pg_cron) that starts the workflows
 src/config_loader.py       configuration and secrets (Pydantic)
 src/fetcher.py             RSS and GitHub ingestion, per-source health
 src/analyzer.py            prompt, output contract, Claude call, validation rules
