@@ -50,6 +50,13 @@ confirmed" (stated by the company, project or authority itself) or "📰 press r
 officially confirmed" (covered by the media only). A one-line legend at the bottom of the
 digest and of the Weekly Radar repeats these definitions.
 
+> **AI-generated content.** The text of each event ("What happened", "Why it matters",
+> "Recommended action" and, when present, "Product opportunity"), as well as the
+> priority, the signals and the Weekly Radar synthesis, is written by Claude and can be
+> wrong or incomplete. Links, source names, dates and evidence rules are checked in code,
+> but the wording and the judgment are not. Read the linked source before acting on a
+> recommendation.
+
 **Weekly Radar.** Every Monday morning, a second workflow reads back the events of the
 daily digests posted the previous week (Monday to Sunday, Paris time) and asks Claude for
 a short synthesis: the top stories, the themes that connect several of them, and a
