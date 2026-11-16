@@ -221,7 +221,7 @@ class SlackRenderingTests(unittest.TestCase):
     def test_escaping_and_traceability(self):
         self.assertIn("ChatGPT &lt;Wallet&gt; ¦ agents", self.text)
         self.assertIn("Agentic checkout &amp; consent UX.", self.text)
-        self.assertIn("Source: OpenAI News (official) · 2 sources · ✅ confirmed · 13 Nov 19:00",
+        self.assertIn("Source: OpenAI News (official) · 2 sources · ✅ officially confirmed · 13 Nov 19:00",
                       self.text)  # 18:00 UTC shown in Europe/Paris
         self.assertIn("|Status · Claude>", self.text)  # signal evidence labelled by source
 

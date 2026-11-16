@@ -130,8 +130,9 @@ class WeeklySlackTests(unittest.TestCase):
         self.assertIn("*🏆 Top stories*", text)
         self.assertIn("*🧵 Themes of the week*", text)
         self.assertIn("*📚 Worth reading*", text)
-        self.assertIn("3 events in 3 digests · 2 ✅ confirmed", text)
-        self.assertIn("📰 reported", text)  # evidence status stays visible
+        self.assertIn("3 events in 3 digests · 2 ✅ officially confirmed", text)
+        self.assertIn("📰 press report, not officially confirmed", text)
+        self.assertIn("📰 press report: covered by the media only", text)  # legend
         self.assertLessEqual(len(payload["blocks"]), 50)
         self.assertFalse(payload["unfurl_links"])
 

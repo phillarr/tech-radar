@@ -35,10 +35,15 @@ SOURCE_TYPES = {
     "COMMUNITY": "community",
 }
 EVIDENCE = {
-    "CONFIRMED": "✅ confirmed",
-    "REPORTED": "📰 reported",
+    "CONFIRMED": "✅ officially confirmed",
+    "REPORTED": "📰 press report, not officially confirmed",
     "UNVERIFIED": "❔ unverified",
 }
+# Footer legend, for readers who do not know the evidence statuses.
+EVIDENCE_LEGEND = (
+    "✅ officially confirmed: stated by the company, project or authority itself · "
+    "📰 press report: covered by the media only, not yet confirmed by those concerned"
+)
 TIMEFRAMES = {
     "NOW": "now",
     "THIS_WEEK": "this week",
@@ -132,7 +137,7 @@ def build_payload(report: DailyReport, tz_name: str = "Europe/Paris") -> Dict[st
     for event in report.events:
         groups.setdefault(event.category, []).append(event)
 
-    budget = MAX_BLOCKS - (2 + len(report.signals) if report.signals else 0) - 2
+    budget = MAX_BLOCKS - (2 + len(report.signals) if report.signals else 0) - 3  # "…and more", legend, footer
     shown = 0
     for category, events in groups.items():
         if len(blocks) + 3 > budget:
@@ -152,6 +157,7 @@ def build_payload(report: DailyReport, tz_name: str = "Europe/Paris") -> Dict[st
         blocks += [{"type": "divider"}, _section("*📡 Signals*")]
         blocks += [_signal_block(s, label_of) for s in report.signals]
 
+    blocks.append(_context(EVIDENCE_LEGEND))
     blocks.append(_context(f"Model {report.model or 'n/a'} · prompt {report.prompt_version}"))
     return {
         "text": f"Tech Watch: {_escape(report.intro)}",

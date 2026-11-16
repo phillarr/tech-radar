@@ -26,7 +26,8 @@ from src.analyzer import AnalysisError, _Strict, call_structured
 from src.config_loader import load_all
 from src.fetcher import RawItem, fetch_rss_feeds
 from src.notifier import (
-    BADGES, CATEGORIES, EVIDENCE, MAX_BLOCKS, _context, _escape, _link, _section,
+    BADGES, CATEGORIES, EVIDENCE, EVIDENCE_LEGEND, MAX_BLOCKS, _context, _escape, _link,
+    _section,
 )
 from src.storage import Storage
 
@@ -311,7 +312,7 @@ def build_weekly_payload(report: WeeklyReport) -> Dict[str, Any]:
         _section(f"*The week in brief*\n{_escape(report.intro)}"),
         _context(f"{_plural(st.get('events', 0), 'event')} in "
                  f"{_plural(st.get('digests', 0), 'digest')} · "
-                 f"{st.get('confirmed', 0)} ✅ confirmed   {counts}"),
+                 f"{st.get('confirmed', 0)} ✅ officially confirmed   {counts}"),
     ]
     if top_categories:
         blocks.append(_context(top_categories))
@@ -336,7 +337,8 @@ def build_weekly_payload(report: WeeklyReport) -> Dict[str, Any]:
             blocks.append(_section(f"{_link(r.url, r.title)} _({_escape(r.source)})_\n"
                                    f"{_escape(r.why)}"))
 
-    blocks = blocks[: MAX_BLOCKS - 1]
+    blocks = blocks[: MAX_BLOCKS - 2]
+    blocks.append(_context(EVIDENCE_LEGEND))
     blocks.append(_context(f"Model {report.model or 'n/a'} · prompt {report.prompt_version}"))
     return {
         "text": f"Weekly Radar: {_escape(report.intro)}",
