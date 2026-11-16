@@ -10,7 +10,7 @@ cybersecurity, startups, research and AI governance.
 ## How it works
 
 ```
-GitHub Actions (08:00 Europe/Paris)
+Supabase pg_cron (08:05 Europe/Paris) ──▶ GitHub Actions
   │
   ├─ fetch      RSS feeds + GitHub releases from the last 24 h      src/fetcher.py
   ├─ store      sources health and articles in Supabase (optional)  src/storage.py
@@ -44,6 +44,12 @@ DEGRADED or INACTIVE, and never re-posts an article already published in the las
 14 days unless its content changed (for example an incident moving to resolved).
 Storage is best effort: if Supabase is unavailable, the digest is still sent.
 
+**Slack message.** Each event shows what happened, why it matters, a recommended action,
+its primary source and its evidence status, spelled out for new readers: "✅ officially
+confirmed" (stated by the company, project or authority itself) or "📰 press report, not
+officially confirmed" (covered by the media only). A one-line legend at the bottom of the
+digest and of the Weekly Radar repeats these definitions.
+
 **Weekly Radar.** Every Monday morning, a second workflow reads back the events of the
 daily digests posted the previous week (Monday to Sunday, Paris time) and asks Claude for
 a short synthesis: the top stories, the themes that connect several of them, and a
@@ -67,17 +73,29 @@ Add these repository secrets (Settings → Secrets and variables → Actions):
 
 `GITHUB_TOKEN` is provided by GitHub Actions and raises the GitHub API rate limit.
 
-### 2. Database (optional)
+### 2. Database and scheduler
 
 Create a Supabase project, open the SQL Editor and run [`db/schema.sql`](db/schema.sql)
 once. Row Level Security is enabled on every table with no policy, so only the secret
-key can read or write.
+key can read or write. The daily digest works without a database, but cross-day
+deduplication, the Weekly Radar and the scheduler need it.
 
-To make the schedule reliable, also run [`db/scheduler.sql`](db/scheduler.sql): Supabase
+The workflows have no GitHub cron, because GitHub delays or drops scheduled runs (in
+practice by several hours, or not at all, on this repository). Run [`db/scheduler.sql`](db/scheduler.sql): Supabase
 (`pg_cron` + `pg_net`) then starts the daily workflow at 07:05 UTC and the Weekly Radar
 on Mondays at 07:45 UTC through the GitHub API. It needs a fine-grained GitHub token
 limited to this repository with the "Actions: Read and write" permission, stored in the
 Supabase Vault as `github_dispatch_token` (instructions at the top of the file).
+
+- The token expires (one year at most): renew it before then and replace the Vault
+  secret with `vault.update_secret`, otherwise the digests stop.
+- If no digest arrives one morning, check GitHub's answers to the scheduler in the SQL
+  Editor (204 means the run was accepted):
+
+  ```sql
+  select status_code, content, created from net._http_response order by created desc limit 5;
+  select jobname, schedule, active from cron.job;
+  ```
 
 ### 3. Sources and settings
 
@@ -106,8 +124,8 @@ gh workflow run daily-watch.yml                   # post to Slack
 A dry run never marks articles as published.
 
 The Weekly Radar runs from [`.github/workflows/weekly-radar.yml`](.github/workflows/weekly-radar.yml)
-on Mondays around 08:45 Paris time, also started by Supabase. A manual run covers the last seven days up to now and
-is a dry run by default:
+on Mondays around 08:45 Paris time, also started by Supabase. A manual run covers the
+last seven days up to now and is a dry run by default:
 
 ```bash
 gh workflow run weekly-radar.yml                    # print the payload in the logs
