@@ -279,6 +279,48 @@ class FetcherTests(unittest.TestCase):
         self.assertEqual(items[0]["source"], "GitHub · vllm-project/vllm")
         self.assertEqual(items[0]["title"], "vllm-project/vllm v0.34.0")
 
+    def test_cisa_kev_keeps_entries_added_since_the_cutoff_date(self):
+        from unittest import mock
+        from src.fetcher import fetch_cisa_kev
+
+        resp = mock.Mock(status_code=200)
+        resp.json.return_value = {"vulnerabilities": [
+            {"cveID": "CVE-2026-1", "vendorProject": "Acme", "product": "Router",
+             "vulnerabilityName": "Acme Router RCE", "dateAdded": "2026-11-16",
+             "shortDescription": "Remote code execution.", "requiredAction": "Patch.",
+             "knownRansomwareCampaignUse": "Known"},
+            {"cveID": "CVE-2026-0", "dateAdded": "2026-11-10"},
+            {"dateAdded": "2026-11-17"},  # malformed: no CVE id
+        ]}
+        with mock.patch("src.fetcher.requests.get", return_value=resp):
+            items, health = fetch_cisa_kev(
+                "https://x/kev.json", datetime(2026, 11, 16, 7, 5, tzinfo=timezone.utc), 2000, 5)
+        self.assertEqual([i["url"] for i in items], ["https://nvd.nist.gov/vuln/detail/CVE-2026-1"])
+        item = items[0]
+        self.assertEqual((item["source"], item["source_type"]), ("CISA KEV", "OFFICIAL"))
+        self.assertEqual(item["title"], "CVE-2026-1: Acme Router RCE")
+        self.assertEqual(item["published_at"], "2026-11-16")
+        self.assertIn("evidence of active exploitation", item["content"])
+        self.assertIn("ransomware campaigns: Known", item["content"])
+        self.assertTrue(health[0]["ok"])
+        self.assertEqual(health[0]["items"], 1)
+
+    def test_cisa_kev_failure_is_reported_not_raised(self):
+        from unittest import mock
+        import requests
+        from src.fetcher import fetch_cisa_kev
+
+        with mock.patch("src.fetcher.requests.get", side_effect=requests.ConnectionError("down")):
+            items, health = fetch_cisa_kev("https://x/kev.json", datetime.now(timezone.utc), 500, 5)
+        self.assertEqual(items, [])
+        self.assertFalse(health[0]["ok"])
+
+    def test_dates_without_time_are_shown_without_time(self):
+        from zoneinfo import ZoneInfo
+        from src.notifier import _local_time
+
+        self.assertEqual(_local_time("2026-11-16", ZoneInfo("Europe/Paris")), "16 Nov")
+
 
 if __name__ == "__main__":
     unittest.main()

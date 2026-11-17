@@ -123,6 +123,11 @@ Everything is configured in [`config/sources.json`](config/sources.json):
 - `settings`: lookback window, items per source, Claude model and effort, maximum number
   of events, display timezone, and the `audience` description the analysis is written for;
 - `sources.github_repositories`: repositories whose latest release is tracked;
+- `sources.cisa_kev_url`: CISA's [Known Exploited Vulnerabilities](https://www.cisa.gov/known-exploited-vulnerabilities-catalog)
+  catalog: vulnerabilities with evidence of active exploitation (an official source). It is
+  read from CISA's own GitHub repository (`cisagov/kev-data`) because cisa.gov refuses
+  requests from GitHub Actions. Entries added since the previous day are analyzed, each
+  linked to its NVD page. Remove the key to disable it;
 - `sources.rss_feeds`: feeds with a `type` of `OFFICIAL`, `MEDIA`, `RESEARCH` or
   `COMMUNITY`, which drives source attribution and evidence status;
 - `sources.reading_feeds`: analysis and commentary feeds, used only by the Weekly Radar.

@@ -5,7 +5,7 @@ from __future__ import annotations
 import calendar
 import logging
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from html import unescape
 from urllib.parse import urljoin, urlparse
 from typing import List, NotRequired, Optional, Tuple, TypedDict
@@ -121,6 +121,66 @@ def fetch_github_releases(
     return items, health
 
 
+KEV_NAME = "CISA KEV"
+KEV_PAGE = "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
+
+
+def fetch_cisa_kev(
+    url: str, cutoff: datetime, max_chars: int, timeout: float
+) -> Tuple[List[RawItem], List[SourceHealth]]:
+    """CISA's Known Exploited Vulnerabilities catalog: CVEs with evidence of active
+    exploitation. One JSON file (no RSS); entries only carry the date they were added,
+    so every entry added on or after the cutoff's date is kept, and the cross-day history
+    drops those already published. Read from CISA's own GitHub repository because
+    cisa.gov refuses requests from GitHub Actions.
+    """
+    # The schema's source kind is 'rss' or 'github': this file is served from GitHub.
+    def health(**kw) -> SourceHealth:
+        return _health(KEV_NAME, KEV_PAGE, "github", "OFFICIAL", **kw)
+
+    try:
+        resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=timeout)
+        resp.raise_for_status()
+        entries = resp.json()["vulnerabilities"]
+    except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+        logger.warning("CISA KEV fetch failed: %s", exc)
+        return [], [health(ok=False, error=str(exc))]
+
+    items: List[RawItem] = []
+    newest: Optional[date] = None
+    for entry in entries:
+        try:
+            added = date.fromisoformat(entry["dateAdded"])
+            cve = entry["cveID"]
+        except (KeyError, TypeError, ValueError):
+            continue
+        newest = max(newest or added, added)
+        if added < cutoff.date():
+            continue
+        ransomware = entry.get("knownRansomwareCampaignUse") or "Unknown"
+        name = entry.get("vulnerabilityName") or "exploited vulnerability"
+        content = (
+            f"CISA added {cve} to its Known Exploited Vulnerabilities catalog on {added}: "
+            f"there is evidence of active exploitation. "
+            f"Vendor: {entry.get('vendorProject', '')}. Product: {entry.get('product', '')}. "
+            f"{entry.get('shortDescription', '')} "
+            f"Known use in ransomware campaigns: {ransomware}. "
+            f"Required action: {entry.get('requiredAction', '')}"
+        )
+        items.append(
+            RawItem(
+                source=KEV_NAME,
+                source_type="OFFICIAL",
+                title=_clean_text(f"{cve}: {name}", 300),
+                url=f"https://nvd.nist.gov/vuln/detail/{cve}",
+                published_at=added.isoformat(),  # a date: CISA gives no time of day
+                content=_clean_text(content, max_chars),
+            )
+        )
+    last = datetime(newest.year, newest.month, newest.day, tzinfo=timezone.utc) if newest else None
+    return items, [health(items=len(items), last=last)]
+
+
 def _entry_datetime(entry: feedparser.FeedParserDict) -> Optional[datetime]:
     for key in ("published_parsed", "updated_parsed", "created_parsed"):
         struct = entry.get(key)
@@ -199,15 +259,22 @@ def fetch_all(
         settings.max_content_chars,
         settings.request_timeout_seconds,
     )
-    logger.info("Fetched %d GitHub release(s) and %d RSS item(s)", len(github_items), len(rss_items))
+    kev_items, kev_health = (
+        fetch_cisa_kev(str(config.sources.cisa_kev_url), cutoff, settings.max_content_chars,
+                       settings.request_timeout_seconds)
+        if config.sources.cisa_kev_url else ([], [])
+    )
+    logger.info("Fetched %d GitHub release(s), %d CISA KEV entry(ies) and %d RSS item(s)",
+                len(github_items), len(kev_items), len(rss_items))
 
     # Feeds can overlap (the same article in two feeds): keep the first occurrence of each URL.
     seen: set[str] = set()
     unique: List[RawItem] = []
-    for item in github_items + rss_items:
+    fetched = github_items + kev_items + rss_items
+    for item in fetched:
         if item["url"] not in seen:
             seen.add(item["url"])
             unique.append(item)
-    if len(unique) != len(github_items) + len(rss_items):
-        logger.info("Removed %d duplicate item(s)", len(github_items) + len(rss_items) - len(unique))
-    return unique, github_health + rss_health
+    if len(unique) != len(fetched):
+        logger.info("Removed %d duplicate item(s)", len(fetched) - len(unique))
+    return unique, github_health + kev_health + rss_health

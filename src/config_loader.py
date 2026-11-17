@@ -26,6 +26,8 @@ class RSSSource(BaseModel):
 class SourcesConfig(BaseModel):
     github_repositories: List[str] = Field(default_factory=list)
     rss_feeds: List[RSSSource] = Field(default_factory=list)
+    # CISA Known Exploited Vulnerabilities catalog (JSON); unset to disable.
+    cisa_kev_url: Optional[HttpUrl] = None
     # Analysis and commentary, used only by the Weekly Radar's "Worth reading" section.
     reading_feeds: List[RSSSource] = Field(default_factory=list)
 

@@ -85,6 +85,8 @@ def _context(text: str) -> Dict[str, Any]:
 
 def _local_time(iso: str, tz: ZoneInfo) -> str:
     try:
+        if len(iso) == 10:  # a date without a time of day (CISA KEV)
+            return datetime.fromisoformat(iso).strftime("%d %b")
         return datetime.fromisoformat(iso).astimezone(tz).strftime("%d %b %H:%M")
     except ValueError:
         return ""
