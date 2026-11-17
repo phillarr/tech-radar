@@ -30,7 +30,7 @@ jobs:
       - name: Keep scheduled runs in the 08:00-11:59 Europe/Paris window
         id: gate
         env:
-          SCHEDULED: ${{ github.event_name == 'schedule' || inputs.scheduled == true }}
+          SCHEDULED: ${{ inputs.scheduled == true }}
         run: |
           hour=$(TZ=Europe/Paris date +%H)
           if [ "$SCHEDULED" = "true" ] && { [ "$hour" -lt 8 ] || [ "$hour" -ge 12 ]; }; then
@@ -70,5 +70,5 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           DRY_RUN: ${{ inputs.dry_run || false }}
-          SCHEDULED: ${{ github.event_name == 'schedule' || inputs.scheduled == true }}
+          SCHEDULED: ${{ inputs.scheduled == true }}
         run: python -m src.main

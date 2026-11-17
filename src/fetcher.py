@@ -201,7 +201,7 @@ def fetch_all(
     )
     logger.info("Fetched %d GitHub release(s) and %d RSS item(s)", len(github_items), len(rss_items))
 
-    # Feeds overlap (e.g. HN Best vs HN 200+ points): keep the first occurrence of each URL.
+    # Feeds can overlap (the same article in two feeds): keep the first occurrence of each URL.
     seen: set[str] = set()
     unique: List[RawItem] = []
     for item in github_items + rss_items:

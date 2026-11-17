@@ -19,7 +19,6 @@ from zoneinfo import ZoneInfo
 if __package__ in (None, ""):  # allow `python src/weekly.py` as well
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import requests
 from pydantic import BaseModel, Field, ValidationError
 
 from src.analyzer import AnalysisError, _Strict, call_structured
@@ -27,7 +26,7 @@ from src.config_loader import load_all
 from src.fetcher import RawItem, fetch_rss_feeds
 from src.notifier import (
     AI_NOTICE, BADGES, CATEGORIES, EVIDENCE, EVIDENCE_LEGEND, MAX_BLOCKS, _context, _escape, _link,
-    _section,
+    _section, post_payload,
 )
 from src.storage import Storage
 
@@ -350,15 +349,8 @@ def build_weekly_payload(report: WeeklyReport) -> Dict[str, Any]:
 
 
 def send_weekly(report: WeeklyReport, webhook_url: str, dry_run: bool) -> None:
-    payload = build_weekly_payload(report)
-    if dry_run:
-        print(json.dumps(payload, ensure_ascii=False, indent=2))
-        logger.info("DRY_RUN enabled: Slack payload printed, not posted")
-        return
-    resp = requests.post(webhook_url, json=payload, timeout=15)
-    if resp.status_code != 200:
-        raise RuntimeError(f"Slack webhook returned {resp.status_code}: {resp.text[:200]}")
-    logger.info("Weekly Radar posted to Slack (%d top stories)", len(report.top_stories))
+    if post_payload(build_weekly_payload(report), webhook_url, dry_run):
+        logger.info("Weekly Radar posted to Slack (%d top stories)", len(report.top_stories))
 
 
 # --- Pipeline --------------------------------------------------------------------------------

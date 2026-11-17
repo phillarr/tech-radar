@@ -30,7 +30,7 @@ jobs:
       - name: Keep scheduled runs in the Monday 08:00-11:59 Europe/Paris window
         id: gate
         env:
-          SCHEDULED: ${{ github.event_name == 'schedule' || inputs.scheduled == true }}
+          SCHEDULED: ${{ inputs.scheduled == true }}
         run: |
           hour=$(TZ=Europe/Paris date +%H)
           day=$(TZ=Europe/Paris date +%u)
@@ -69,6 +69,6 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
-          SCHEDULED: ${{ github.event_name == 'schedule' || inputs.scheduled == true }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          SCHEDULED: ${{ inputs.scheduled == true }}
         run: python -m src.weekly

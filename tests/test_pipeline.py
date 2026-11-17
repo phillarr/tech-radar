@@ -240,6 +240,24 @@ class SlackRenderingTests(unittest.TestCase):
         self.assertIn("|Status · Claude>", self.text)  # signal evidence labelled by source
 
 
+class SlackLinkTests(unittest.TestCase):
+    def test_feed_urls_cannot_break_the_link_markup(self):
+        from src.notifier import _link
+
+        # A crafted feed link must not close the link and inject a channel-wide mention.
+        link = _link("https://evil.example/a><!channel>|x", "Title")
+        self.assertNotIn("<!channel>", link)
+        self.assertEqual(link.count("<"), 1)
+        self.assertEqual(link.count(">"), 1)
+        self.assertTrue(link.endswith("|Title>"))
+
+    def test_only_http_links_are_clickable(self):
+        from src.notifier import _link
+
+        self.assertEqual(_link("javascript:alert(1)", "Title"), "Title")
+        self.assertEqual(_link("https://a.com/x?a=1&b=2", "T"), "<https://a.com/x?a=1&amp;b=2|T>")
+
+
 class FetcherTests(unittest.TestCase):
     def test_relative_feed_links_are_resolved_against_the_site(self):
         from src.fetcher import _absolute

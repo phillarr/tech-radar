@@ -6,6 +6,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import requests
@@ -66,7 +67,12 @@ def _escape(text: str) -> str:
 
 
 def _link(url: str, label: str) -> str:
-    return f"<{url}|{_escape(label).replace('|', '¦')}>"
+    """A Slack link. Feed URLs are untrusted: only http(s) links are kept, and characters
+    that would end the link markup early (and could inject a mention) are escaped."""
+    text = _escape(label).replace("|", "¦")
+    if urlparse(url).scheme not in ("http", "https"):
+        return text
+    return f"<{_escape(url).replace('|', '%7C')}|{text}>"
 
 
 def _section(text: str) -> Dict[str, Any]:
@@ -172,16 +178,20 @@ def build_payload(report: DailyReport, tz_name: str = "Europe/Paris") -> Dict[st
     }
 
 
-def send_to_slack(
-    report: DailyReport, webhook_url: str, dry_run: bool = False, tz_name: str = "Europe/Paris"
-) -> None:
-    payload = build_payload(report, tz_name)
+def post_payload(payload: Dict[str, Any], webhook_url: str, dry_run: bool) -> bool:
+    """Post a Block Kit payload, or print it on a dry run. Returns True when posted."""
     if dry_run:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         logger.info("DRY_RUN enabled: Slack payload printed, not posted")
-        return
-
+        return False
     resp = requests.post(webhook_url, json=payload, timeout=15)
     if resp.status_code != 200:
         raise RuntimeError(f"Slack webhook returned {resp.status_code}: {resp.text[:200]}")
-    logger.info("Report posted to Slack (%d event(s))", len(report.events))
+    return True
+
+
+def send_to_slack(
+    report: DailyReport, webhook_url: str, dry_run: bool = False, tz_name: str = "Europe/Paris"
+) -> None:
+    if post_payload(build_payload(report, tz_name), webhook_url, dry_run):
+        logger.info("Report posted to Slack (%d event(s))", len(report.events))
