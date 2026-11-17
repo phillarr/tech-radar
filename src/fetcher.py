@@ -107,12 +107,12 @@ def fetch_github_releases(
         if not fresh:
             continue
 
-        name = release.get("name") or release.get("tag_name") or "New release"
+        release_name = release.get("name") or release.get("tag_name") or "New release"
         items.append(
             RawItem(
-                source=name,
+                source=name,  # "GitHub · owner/repo", not the release name
                 source_type="OFFICIAL",
-                title=f"{repo} {name}".strip(),
+                title=f"{repo} {release_name}".strip(),
                 url=release.get("html_url") or f"https://github.com/{repo}/releases",
                 published_at=published.isoformat(),
                 content=_clean_text(release.get("body") or "", max_chars),

@@ -133,6 +133,7 @@ class WeeklySlackTests(unittest.TestCase):
         self.assertIn("3 events in 3 digests · 2 ✅ officially confirmed", text)
         self.assertIn("📰 press report, not officially confirmed", text)
         self.assertIn("📰 press report: covered by the media only", text)  # legend
+        self.assertIn("AI-generated and may contain errors", text)
         self.assertLessEqual(len(payload["blocks"]), 50)
         self.assertFalse(payload["unfurl_links"])
 

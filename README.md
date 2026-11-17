@@ -7,6 +7,17 @@ set of evidence-based events and signals, and posts the digest to Slack.
 It covers AI product management, AI engineering, cloud and infrastructure,
 cybersecurity, startups, research and AI governance.
 
+![Daily digest in Slack: summary, priorities and the first cybersecurity events](docs/images/digest-top.png)
+
+<details>
+<summary>End of the same digest: more categories, signals and the evidence legend</summary>
+
+![End of the daily digest: AI governance, startups, signals and legend](docs/images/digest-signals.png)
+
+</details>
+
+*Digest of 17 November 2026, as posted in Slack.*
+
 ## How it works
 
 ```

@@ -26,7 +26,7 @@ from src.analyzer import AnalysisError, _Strict, call_structured
 from src.config_loader import load_all
 from src.fetcher import RawItem, fetch_rss_feeds
 from src.notifier import (
-    BADGES, CATEGORIES, EVIDENCE, EVIDENCE_LEGEND, MAX_BLOCKS, _context, _escape, _link,
+    AI_NOTICE, BADGES, CATEGORIES, EVIDENCE, EVIDENCE_LEGEND, MAX_BLOCKS, _context, _escape, _link,
     _section,
 )
 from src.storage import Storage
@@ -337,8 +337,9 @@ def build_weekly_payload(report: WeeklyReport) -> Dict[str, Any]:
             blocks.append(_section(f"{_link(r.url, r.title)} _({_escape(r.source)})_\n"
                                    f"{_escape(r.why)}"))
 
-    blocks = blocks[: MAX_BLOCKS - 2]
+    blocks = blocks[: MAX_BLOCKS - 3]  # legend, AI notice, footer
     blocks.append(_context(EVIDENCE_LEGEND))
+    blocks.append(_context(AI_NOTICE))
     blocks.append(_context(f"Model {report.model or 'n/a'} · prompt {report.prompt_version}"))
     return {
         "text": f"Weekly Radar: {_escape(report.intro)}",

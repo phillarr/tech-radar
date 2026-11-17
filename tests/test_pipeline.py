@@ -233,6 +233,20 @@ class FetcherTests(unittest.TestCase):
         self.assertEqual(_absolute("/2026/11/x", "http://hbr.org"), "http://hbr.org/2026/11/x")
         self.assertEqual(_absolute("https://a.com/b", "http://hbr.org"), "https://a.com/b")
 
+    def test_github_release_source_is_the_repository_not_the_release_name(self):
+        # 17 Nov: the vLLM release was shown as "Source: v0.34.0 (official)".
+        from unittest import mock
+        from src.fetcher import fetch_github_releases
+
+        resp = mock.Mock(status_code=200)
+        resp.json.return_value = {"name": "v0.34.0", "html_url": "https://github.com/x/r",
+                                  "published_at": "2026-11-17T00:22:00Z", "body": "notes"}
+        with mock.patch("src.fetcher.requests.get", return_value=resp):
+            items, _ = fetch_github_releases(["vllm-project/vllm"],
+                                             datetime(2026, 11, 16, tzinfo=timezone.utc), 500, 5)
+        self.assertEqual(items[0]["source"], "GitHub · vllm-project/vllm")
+        self.assertEqual(items[0]["title"], "vllm-project/vllm v0.34.0")
+
 
 if __name__ == "__main__":
     unittest.main()

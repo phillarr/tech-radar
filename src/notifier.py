@@ -44,6 +44,10 @@ EVIDENCE_LEGEND = (
     "✅ officially confirmed: stated by the company, project or authority itself · "
     "📰 press report: covered by the media only, not yet confirmed by those concerned"
 )
+AI_NOTICE = (
+    "🤖 Summaries, priorities and recommendations are AI-generated and may contain errors: "
+    "check the source before acting."
+)
 TIMEFRAMES = {
     "NOW": "now",
     "THIS_WEEK": "this week",
@@ -137,7 +141,7 @@ def build_payload(report: DailyReport, tz_name: str = "Europe/Paris") -> Dict[st
     for event in report.events:
         groups.setdefault(event.category, []).append(event)
 
-    budget = MAX_BLOCKS - (2 + len(report.signals) if report.signals else 0) - 3  # "…and more", legend, footer
+    budget = MAX_BLOCKS - (2 + len(report.signals) if report.signals else 0) - 4  # "…and more", legend, AI notice, footer
     shown = 0
     for category, events in groups.items():
         if len(blocks) + 3 > budget:
@@ -158,6 +162,7 @@ def build_payload(report: DailyReport, tz_name: str = "Europe/Paris") -> Dict[st
         blocks += [_signal_block(s, label_of) for s in report.signals]
 
     blocks.append(_context(EVIDENCE_LEGEND))
+    blocks.append(_context(AI_NOTICE))
     blocks.append(_context(f"Model {report.model or 'n/a'} · prompt {report.prompt_version}"))
     return {
         "text": f"Tech Watch: {_escape(report.intro)}",
