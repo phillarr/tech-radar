@@ -20,7 +20,7 @@ from src.fetcher import RawItem
 
 logger = logging.getLogger(__name__)
 
-PROMPT_VERSION = "2026-11-15.1"
+PROMPT_VERSION = "2026-11-17.1"
 
 Category = Literal[
     "AI_PRODUCT_MANAGEMENT",
@@ -105,7 +105,7 @@ research 10. A resolved incident has low urgency.
 
 PRIORITY
 - CRITICAL: immediate action required (active exploitation, immediate security risk, \
-critical incident still ongoing). CRITICAL must be rare and justified by concrete facts.
+critical incident still ongoing). CRITICAL must be rare and justified by concrete facts, and requires a CONFIRMED event (an official source): a press report alone is at most MAJOR.
 - MAJOR: deserves attention (breaking change, strategic announcement, important \
 vulnerability, major evolution). Something new is not automatically MAJOR.
 - INFO: useful information (release, feature, research, relevant news, resolved incident).
@@ -380,6 +380,9 @@ def postprocess(
         if evidence == "UNVERIFIED":  # the digest carries facts, not speculation
             logger.info("Dropped unverified event: %s", event.title)
             continue
+        if priority == "CRITICAL" and evidence != "CONFIRMED":
+            logger.info("Demoted to MAJOR (not officially confirmed): %s", event.title)
+            priority = "MAJOR"  # CRITICAL is reserved for officially confirmed events
 
         secondary = [c for c in dict.fromkeys(event.secondary_categories) if c != event.category]
 

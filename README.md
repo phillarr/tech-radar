@@ -46,7 +46,8 @@ code, not left to the model:
 - exactly one PRIMARY source per event, an official one when available;
 - CONFIRMED requires an official source, otherwise the event is REPORTED;
 - UNVERIFIED events (thin or contradictory claims) are left out of the digest;
-- CRITICAL requires an urgency of at least 80, otherwise it is demoted to MAJOR;
+- CRITICAL requires an urgency of at least 80 and an officially confirmed event,
+  otherwise it is demoted to MAJOR;
 - a signal needs at least two known items as evidence.
 
 **Storage.** With Supabase configured, the agent keeps the history of articles,

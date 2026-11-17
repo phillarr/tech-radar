@@ -150,6 +150,20 @@ class PriorityTests(unittest.TestCase):
         ])
         self.assertEqual(report.events[0].priority, "MAJOR")
 
+    def test_critical_requires_an_official_confirmation(self):
+        # 17 Nov: a ScreenConnect campaign was CRITICAL on a single media report.
+        report = run([
+            event("Press-only attack", [("https://techcrunch.com/langchain-3b", "PRIMARY")],
+                  category="CYBERSECURITY", priority="CRITICAL",
+                  scores=Scores(relevance=90, impact=90, urgency=95)),
+            event("Official incident",
+                  [("https://www.githubstatus.com/incidents/51drrqvsv66g", "PRIMARY")],
+                  category="CLOUD_INFRASTRUCTURE", priority="CRITICAL",
+                  scores=Scores(relevance=90, impact=90, urgency=95)),
+        ])
+        self.assertEqual({e.title: e.priority for e in report.events},
+                         {"Press-only attack": "MAJOR", "Official incident": "CRITICAL"})
+
     def test_ordering_priority_then_urgency_then_relevance_and_cap(self):
         report = run([
             event("info", [("https://techcrunch.com/langchain-3b", "PRIMARY")],
