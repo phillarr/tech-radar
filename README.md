@@ -10,9 +10,9 @@ cybersecurity, startups, research and AI governance.
 ![Daily digest in Slack: summary, priorities and the first cybersecurity events](docs/images/digest-top.png)
 
 <details>
-<summary>End of the same digest: more categories, signals and the evidence legend</summary>
+<summary>Full digest: all 10 events by category, signals and the evidence legend</summary>
 
-![End of the daily digest: AI governance, startups, signals and legend](docs/images/digest-signals.png)
+![Full daily digest of 17 November 2026](docs/images/digest-full.png)
 
 </details>
 
