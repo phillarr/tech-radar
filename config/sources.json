@@ -41,10 +41,12 @@
       { "name": "Google Cloud Blog", "url": "https://cloudblog.withgoogle.com/rss/", "type": "OFFICIAL" },
       { "name": "Cloudflare Blog", "url": "https://blog.cloudflare.com/rss/", "type": "OFFICIAL" },
       { "name": "GitHub Blog", "url": "https://github.blog/feed/", "type": "OFFICIAL" },
+      { "name": "Salesforce News", "url": "https://www.salesforce.com/news/feed/", "type": "OFFICIAL" },
       { "name": "Python Insider", "url": "https://blog.python.org/feeds/posts/default", "type": "OFFICIAL" },
 
       { "name": "Google Research", "url": "https://research.google/blog/rss/", "type": "RESEARCH" },
       { "name": "Microsoft Research", "url": "https://www.microsoft.com/en-us/research/feed/", "type": "RESEARCH" },
+      { "name": "Ai2 (Allen Institute for AI)", "url": "https://allenai.org/rss.xml", "type": "RESEARCH" },
 
       { "name": "TechCrunch AI", "url": "https://techcrunch.com/category/artificial-intelligence/feed/", "type": "MEDIA" },
       { "name": "The Verge AI", "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml", "type": "MEDIA" },
@@ -62,12 +64,23 @@
       { "name": "CNIL", "url": "https://www.cnil.fr/fr/rss.xml", "type": "OFFICIAL" },
       { "name": "European Commission (Digital Strategy)", "url": "https://digital-strategy.ec.europa.eu/en/rss.xml", "type": "OFFICIAL" },
       { "name": "NIST News", "url": "https://www.nist.gov/news-events/news/rss.xml", "type": "OFFICIAL" },
+      { "name": "UK AI Security Institute", "url": "https://www.gov.uk/government/organisations/ai-security-institute.atom", "type": "OFFICIAL" },
 
       { "name": "Status · Claude", "url": "https://status.claude.com/history.rss", "type": "OFFICIAL" },
       { "name": "Status · OpenAI", "url": "https://status.openai.com/history.rss", "type": "OFFICIAL" },
       { "name": "Status · GitHub", "url": "https://www.githubstatus.com/history.rss", "type": "OFFICIAL" },
       { "name": "Status · Cloudflare", "url": "https://www.cloudflarestatus.com/history.rss", "type": "OFFICIAL" },
       { "name": "Status · Azure", "url": "https://rssfeed.azure.status.microsoft/en-us/status/feed/", "type": "OFFICIAL" }
+    ],
+    "sitemaps": [
+      { "name": "Anthropic News", "url": "https://www.anthropic.com/sitemap.xml", "type": "OFFICIAL", "include": ["/news/", "/research/"] }
+    ],
+    "huggingface_authors": [
+      { "name": "DeepSeek", "author": "deepseek-ai" },
+      { "name": "Qwen", "author": "Qwen" },
+      { "name": "Kimi (Moonshot AI)", "author": "moonshotai" },
+      { "name": "MiniMax", "author": "MiniMaxAI" },
+      { "name": "GLM (Z.ai)", "author": "zai-org" }
     ],
     "reading_feeds": [
       { "name": "Harvard Business Review", "url": "http://feeds.hbr.org/harvardbusiness", "type": "MEDIA", "max_items": 30 }

@@ -13,7 +13,7 @@ from typing import List, NotRequired, Optional, Tuple, TypedDict
 import feedparser
 import requests
 
-from src.config_loader import AppConfig, RSSSource
+from src.config_loader import AppConfig, HuggingFaceAuthor, RSSSource, SitemapSource
 
 logger = logging.getLogger(__name__)
 
@@ -239,6 +239,167 @@ def fetch_rss_feeds(
     return items, health
 
 
+_LOC_RE = re.compile(r"<loc>\s*([^<\s]+)\s*</loc>\s*(?:<lastmod>\s*([^<\s]+)\s*</lastmod>)?")
+_META_RE = re.compile(r"<meta\b[^>]*>", re.IGNORECASE)
+_ATTR_RE = re.compile(r'([\w:-]+)\s*=\s*"([^"]*)"')
+MAX_SITEMAP_PAGES = 30  # pages opened per sitemap and run, newest lastmod first
+
+
+def _page_meta(html: str) -> dict:
+    """The <meta> tags of a page, keyed by their property or name attribute."""
+    meta = {}
+    for tag in _META_RE.findall(html):
+        attrs = dict(_ATTR_RE.findall(tag))
+        key = attrs.get("property") or attrs.get("name")
+        if key and "content" in attrs:
+            meta.setdefault(key.lower(), unescape(attrs["content"]))
+    return meta
+
+
+def fetch_sitemaps(
+    sitemaps: List[SitemapSource],
+    cutoff: datetime,
+    max_items: int,
+    max_chars: int,
+    timeout: float,
+) -> Tuple[List[RawItem], List[SourceHealth]]:
+    """Sites with no RSS feed (e.g. Anthropic). A sitemap's lastmod changes whenever a page
+    is edited, sometimes for hundreds of old pages at once, so it only picks the candidates:
+    each candidate page is opened and kept only if its own publication date
+    (article:published_time) is on or after the cutoff's date.
+    """
+    items: List[RawItem] = []
+    health: List[SourceHealth] = []
+    for sm in sitemaps:
+        sm_url = str(sm.url)
+
+        # The schema's source kind is 'rss' or 'github': a sitemap is the closest to a feed.
+        def h(**kw) -> SourceHealth:
+            return _health(sm.name, sm_url, "rss", sm.type, **kw)
+
+        try:
+            resp = requests.get(sm_url, headers={"User-Agent": USER_AGENT}, timeout=timeout)
+            resp.raise_for_status()
+        except requests.RequestException as exc:
+            logger.warning("Sitemap fetch failed for %s: %s", sm.name, exc)
+            health.append(h(ok=False, error=str(exc)))
+            continue
+
+        candidates = []
+        for loc, lastmod in _LOC_RE.findall(resp.text):
+            modified = _parse_iso8601(lastmod)
+            if modified is None or modified < cutoff:
+                continue
+            loc = unescape(loc)
+            if any(urlparse(loc).path.startswith(prefix) for prefix in sm.include):
+                candidates.append((modified, loc))
+        candidates.sort(reverse=True)
+
+        found: List[Tuple[datetime, RawItem]] = []
+        for _, page_url in candidates[:MAX_SITEMAP_PAGES]:
+            try:
+                page = requests.get(page_url, headers={"User-Agent": USER_AGENT}, timeout=timeout)
+                page.raise_for_status()
+            except requests.RequestException as exc:
+                logger.info("Sitemap page skipped (%s): %s", page_url, exc)
+                continue
+            meta = _page_meta(page.text)
+            published = _parse_iso8601(meta.get("article:published_time"))
+            if published is None or published.date() < cutoff.date():
+                continue
+            title = meta.get("og:title") or meta.get("title") or page_url
+            description = meta.get("og:description") or meta.get("description") or ""
+            found.append((published, RawItem(
+                source=sm.name,
+                source_type=sm.type,
+                title=_clean_text(title, 300),
+                url=page_url,
+                published_at=published.isoformat(),
+                content=_clean_text(description, max_chars),
+            )))
+        found.sort(key=lambda p: p[0], reverse=True)
+        selected = [item for _, item in found[: sm.max_items or max_items]]
+        items.extend(selected)
+        health.append(h(items=len(selected), last=found[0][0] if found else None))
+    return items, health
+
+
+HF_API = "https://huggingface.co/api/models"
+_FRONT_MATTER_RE = re.compile(r"\A---\s*\n.*?\n---\s*\n", re.DOTALL)
+_MD_IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
+_MD_LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+
+
+def _model_card_text(card: str) -> str:
+    card = _FRONT_MATTER_RE.sub("", card)
+    return _MD_LINK_RE.sub(r"\1", _MD_IMAGE_RE.sub(" ", card)).replace("#", " ")
+
+
+def fetch_huggingface_models(
+    authors: List[HuggingFaceAuthor],
+    cutoff: datetime,
+    max_items: int,
+    max_chars: int,
+    timeout: float,
+) -> Tuple[List[RawItem], List[SourceHealth]]:
+    """New models published by a lab's own Hugging Face organization (e.g. DeepSeek, Qwen):
+    for labs with no feed, it is the official release channel of their open models.
+    """
+    headers = {"User-Agent": USER_AGENT}
+    items: List[RawItem] = []
+    health: List[SourceHealth] = []
+    for org in authors:
+        name, page = f"Hugging Face · {org.name}", f"https://huggingface.co/{org.author}"
+        # The schema's source kind is 'rss' or 'github': a model listing is closest to a feed.
+        try:
+            resp = requests.get(
+                HF_API, headers=headers, timeout=timeout,
+                params={"author": org.author, "sort": "createdAt", "direction": "-1",
+                        "limit": str(max_items * 2)},
+            )
+            resp.raise_for_status()
+            models = resp.json()
+            if not isinstance(models, list):
+                raise ValueError("unexpected response")
+        except (requests.RequestException, ValueError) as exc:
+            logger.warning("Hugging Face fetch failed for %s: %s", org.author, exc)
+            health.append(_health(name, page, "rss", "OFFICIAL", ok=False, error=str(exc)))
+            continue
+
+        dated = [(d, m) for m in models
+                 if isinstance(m, dict) and m.get("id")
+                 and (d := _parse_iso8601(m.get("createdAt"))) is not None]
+        recent = sorted(((d, m) for d, m in dated if d >= cutoff), key=lambda p: p[0], reverse=True)
+        selected = recent[:max_items]
+        newest = max((d for d, _ in dated), default=None)
+        health.append(_health(name, page, "rss", "OFFICIAL", items=len(selected), last=newest))
+
+        for created, model in selected:
+            model_id = model["id"]
+            card = ""
+            try:
+                card_resp = requests.get(f"https://huggingface.co/{model_id}/raw/main/README.md",
+                                         headers=headers, timeout=timeout)
+                if card_resp.ok:
+                    card = _model_card_text(card_resp.text)
+            except requests.RequestException as exc:
+                logger.info("No model card for %s: %s", model_id, exc)
+            task = model.get("pipeline_tag") or "unspecified task"
+            content = (f"{org.name} published a new model on its official Hugging Face page: "
+                       f"{model_id} ({task}). {card}")
+            items.append(
+                RawItem(
+                    source=name,
+                    source_type="OFFICIAL",
+                    title=f"{org.name} releases {model_id.split('/', 1)[-1]} on Hugging Face",
+                    url=f"https://huggingface.co/{model_id}",
+                    published_at=created.isoformat(),
+                    content=_clean_text(content, max_chars),
+                )
+            )
+    return items, health
+
+
 def fetch_all(
     config: AppConfig, github_token: Optional[str] = None
 ) -> Tuple[List[RawItem], List[SourceHealth]]:
@@ -259,22 +420,37 @@ def fetch_all(
         settings.max_content_chars,
         settings.request_timeout_seconds,
     )
+    sitemap_items, sitemap_health = fetch_sitemaps(
+        config.sources.sitemaps,
+        cutoff,
+        settings.max_items_per_source,
+        settings.max_content_chars,
+        settings.request_timeout_seconds,
+    )
+    hf_items, hf_health = fetch_huggingface_models(
+        config.sources.huggingface_authors,
+        cutoff,
+        settings.max_items_per_source,
+        settings.max_content_chars,
+        settings.request_timeout_seconds,
+    )
     kev_items, kev_health = (
         fetch_cisa_kev(str(config.sources.cisa_kev_url), cutoff, settings.max_content_chars,
                        settings.request_timeout_seconds)
         if config.sources.cisa_kev_url else ([], [])
     )
-    logger.info("Fetched %d GitHub release(s), %d CISA KEV entry(ies) and %d RSS item(s)",
-                len(github_items), len(kev_items), len(rss_items))
+    logger.info("Fetched %d GitHub release(s), %d CISA KEV entry(ies), %d RSS item(s), "
+                "%d sitemap page(s) and %d Hugging Face model(s)", len(github_items),
+                len(kev_items), len(rss_items), len(sitemap_items), len(hf_items))
 
     # Feeds can overlap (the same article in two feeds): keep the first occurrence of each URL.
     seen: set[str] = set()
     unique: List[RawItem] = []
-    fetched = github_items + kev_items + rss_items
+    fetched = github_items + kev_items + rss_items + sitemap_items + hf_items
     for item in fetched:
         if item["url"] not in seen:
             seen.add(item["url"])
             unique.append(item)
     if len(unique) != len(fetched):
         logger.info("Removed %d duplicate item(s)", len(fetched) - len(unique))
-    return unique, github_health + kev_health + rss_health
+    return unique, github_health + kev_health + rss_health + sitemap_health + hf_health

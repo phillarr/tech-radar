@@ -23,9 +23,26 @@ class RSSSource(BaseModel):
     max_items: Optional[int] = Field(default=None, gt=0)  # overrides settings.max_items_per_source
 
 
+class SitemapSource(BaseModel):
+    """A site without an RSS feed: its sitemap lists the pages, each page gives its date."""
+    name: str
+    url: HttpUrl  # the sitemap.xml
+    type: SourceType
+    include: List[str] = Field(min_length=1)  # URL path prefixes to follow, e.g. "/news/"
+    max_items: Optional[int] = Field(default=None, gt=0)
+
+
+class HuggingFaceAuthor(BaseModel):
+    """A lab's official Hugging Face organization: each new model it publishes is an item."""
+    name: str  # display name, e.g. "DeepSeek"
+    author: str  # the organization's id on Hugging Face, e.g. "deepseek-ai"
+
+
 class SourcesConfig(BaseModel):
     github_repositories: List[str] = Field(default_factory=list)
     rss_feeds: List[RSSSource] = Field(default_factory=list)
+    sitemaps: List[SitemapSource] = Field(default_factory=list)
+    huggingface_authors: List[HuggingFaceAuthor] = Field(default_factory=list)
     # CISA Known Exploited Vulnerabilities catalog (JSON); unset to disable.
     cisa_kev_url: Optional[HttpUrl] = None
     # Analysis and commentary, used only by the Weekly Radar's "Worth reading" section.

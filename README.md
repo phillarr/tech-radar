@@ -1,7 +1,7 @@
 # Tech Radar
 
 An autonomous technology intelligence agent. Every morning it collects news from about
-50 official, media and research sources, asks Claude to turn them into a short
+55 official, media and research sources, asks Claude to turn them into a short
 set of evidence-based events and signals, and posts the digest to Slack.
 
 It covers AI product management, AI engineering, cloud and infrastructure,
@@ -23,7 +23,7 @@ cybersecurity, startups, research and AI governance.
 ```
 Supabase pg_cron (08:05 Europe/Paris) ──▶ GitHub Actions
   │
-  ├─ fetch      RSS feeds + GitHub releases from the last 24 h      src/fetcher.py
+  ├─ fetch      feeds, releases, new models from the last 24 h      src/fetcher.py
   ├─ store      sources health and articles in Supabase (optional)  src/storage.py
   ├─ dedupe     skip articles already published unchanged
   ├─ analyze    Claude groups items into events, scores them        src/analyzer.py
@@ -130,6 +130,13 @@ Everything is configured in [`config/sources.json`](config/sources.json):
   linked to its NVD page. Remove the key to disable it;
 - `sources.rss_feeds`: feeds with a `type` of `OFFICIAL`, `MEDIA`, `RESEARCH` or
   `COMMUNITY`, which drives source attribution and evidence status;
+- `sources.sitemaps`: sites with no RSS feed (Anthropic). The sitemap lists the pages under
+  the `include` paths, and each page is kept only if its own publication date
+  (`article:published_time`) is recent, since a sitemap's modification dates also change
+  when old pages are edited;
+- `sources.huggingface_authors`: labs whose official Hugging Face organization is their
+  release channel for open models (DeepSeek, Qwen, Kimi, MiniMax, GLM). Each model created
+  in the lookback window becomes an official item, described by its model card;
 - `sources.reading_feeds`: analysis and commentary feeds, used only by the Weekly Radar.
 
 ## Running
@@ -183,7 +190,7 @@ config/sources.json        sources and settings
 db/schema.sql              Supabase schema
 db/scheduler.sql           Supabase scheduler (pg_cron) that starts the workflows
 src/config_loader.py       configuration and secrets (Pydantic)
-src/fetcher.py             RSS and GitHub ingestion, per-source health
+src/fetcher.py             RSS, sitemap, Hugging Face and GitHub ingestion, per-source health
 src/analyzer.py            prompt, output contract, Claude call, validation rules
 src/notifier.py            Slack message
 src/storage.py             Supabase client and cross-day deduplication
