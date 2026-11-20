@@ -30,6 +30,20 @@ from src.notifier import build_payload
 NOW = datetime(2026, 11, 14, 7, 0, tzinfo=timezone.utc)
 
 
+def _resp(text: str = "", json_body=None, url: str = "", status: int = 200, headers=None):
+    """A real requests.Response, readable by the fetcher's size-capped download."""
+    import io
+    import json
+    import requests
+
+    body = json.dumps(json_body) if json_body is not None else text
+    r = requests.Response()
+    r.status_code, r.url, r.encoding = status, url, "utf-8"
+    r.raw = io.BytesIO(body.encode("utf-8"))
+    r.headers.update(headers or {})
+    return r
+
+
 def item(url, source, source_type, title="t"):
     return {
         "source": source,
@@ -270,9 +284,8 @@ class FetcherTests(unittest.TestCase):
         from unittest import mock
         from src.fetcher import fetch_github_releases
 
-        resp = mock.Mock(status_code=200)
-        resp.json.return_value = {"name": "v0.34.0", "html_url": "https://github.com/x/r",
-                                  "published_at": "2026-11-17T00:22:00Z", "body": "notes"}
+        resp = _resp(json_body={"name": "v0.34.0", "html_url": "https://github.com/x/r",
+                                  "published_at": "2026-11-17T00:22:00Z", "body": "notes"})
         with mock.patch("src.fetcher.requests.get", return_value=resp):
             items, _ = fetch_github_releases(["vllm-project/vllm"],
                                              datetime(2026, 11, 16, tzinfo=timezone.utc), 500, 5)
@@ -283,15 +296,14 @@ class FetcherTests(unittest.TestCase):
         from unittest import mock
         from src.fetcher import fetch_cisa_kev
 
-        resp = mock.Mock(status_code=200)
-        resp.json.return_value = {"vulnerabilities": [
+        resp = _resp(json_body={"vulnerabilities": [
             {"cveID": "CVE-2026-1", "vendorProject": "Acme", "product": "Router",
              "vulnerabilityName": "Acme Router RCE", "dateAdded": "2026-11-16",
              "shortDescription": "Remote code execution.", "requiredAction": "Patch.",
              "knownRansomwareCampaignUse": "Known"},
             {"cveID": "CVE-2026-0", "dateAdded": "2026-11-10"},
             {"dateAdded": "2026-11-17"},  # malformed: no CVE id
-        ]}
+        ]})
         with mock.patch("src.fetcher.requests.get", return_value=resp):
             items, health = fetch_cisa_kev(
                 "https://x/kev.json", datetime(2026, 11, 16, 7, 5, tzinfo=timezone.utc), 2000, 5)
@@ -321,14 +333,17 @@ class FetcherTests(unittest.TestCase):
         from src.config_loader import SitemapSource
         from src.fetcher import fetch_sitemaps
 
-        sitemap = mock.Mock(status_code=200, text="""<urlset>
+        sitemap = _resp("""<urlset>
           <url><loc>https://a.com/news/new</loc><lastmod>2026-11-20T09:00:00Z</lastmod></url>
           <url><loc>https://a.com/research/old</loc><lastmod>2026-11-20T08:00:00Z</lastmod></url>
           <url><loc>https://a.com/legal/terms</loc><lastmod>2026-11-20T08:00:00Z</lastmod></url>
+          <url><loc>https://evil.example/news/x</loc><lastmod>2026-11-20T10:00:00Z</lastmod></url>
+          <url><loc>http://a.com/news/plain</loc><lastmod>2026-11-20T10:00:00Z</lastmod></url>
+          <url><loc>https://a.com/news/moved</loc><lastmod>2026-11-20T10:00:00Z</lastmod></url>
           <url><loc>https://a.com/news/stale</loc><lastmod>2026-10-01T08:00:00Z</lastmod></url>
         </urlset>""")
         def page(published, title):
-            return mock.Mock(status_code=200, text=(
+            return _resp((
                 f'<meta property="og:title" content="{title}"/>'
                 f'<meta property="og:description" content="About &amp; more"/>'
                 f'<meta property="article:published_time" content="{published}"/>'))
@@ -336,7 +351,11 @@ class FetcherTests(unittest.TestCase):
             "https://a.com/sitemap.xml": sitemap,
             "https://a.com/news/new": page("2026-11-20T00:00:00.000Z", "New launch"),
             "https://a.com/research/old": page("2025-02-10T00:00:00.000Z", "Old paper"),
+            "https://a.com/news/moved": page("2026-11-20T00:00:00.000Z", "Moved"),
         }
+        for u, r in pages.items():
+            r.url = u
+        pages["https://a.com/news/moved"].url = "https://other.example/landing"  # redirected
         source = SitemapSource(name="A News", url="https://a.com/sitemap.xml", type="OFFICIAL",
                                include=["/news/", "/research/"])
         with mock.patch("src.fetcher.requests.get", side_effect=lambda url, **_: pages[url]) as get:
@@ -346,7 +365,11 @@ class FetcherTests(unittest.TestCase):
         self.assertEqual(items[0]["title"], "New launch")
         self.assertEqual(items[0]["content"], "About & more")
         self.assertEqual(items[0]["source_type"], "OFFICIAL")
-        self.assertNotIn("https://a.com/legal/terms", [c.args[0] for c in get.call_args_list])
+        requested = [c.args[0] for c in get.call_args_list]
+        self.assertNotIn("https://a.com/legal/terms", requested)
+        # Pages on another host or over plain http are never requested.
+        self.assertNotIn("https://evil.example/news/x", requested)
+        self.assertNotIn("http://a.com/news/plain", requested)
         self.assertEqual((health[0]["ok"], health[0]["items"], health[0]["kind"]), (True, 1, "rss"))
 
     def test_huggingface_keeps_models_created_since_the_cutoff(self):
@@ -354,14 +377,16 @@ class FetcherTests(unittest.TestCase):
         from src.config_loader import HuggingFaceAuthor
         from src.fetcher import fetch_huggingface_models
 
-        listing = mock.Mock(status_code=200)
-        listing.json.return_value = [
+        listing = _resp(json_body=[
             {"id": "lab/Model-2", "createdAt": "2026-11-20T03:00:00.000Z",
              "pipeline_tag": "text-generation"},
             {"id": "lab/Model-1", "createdAt": "2026-10-01T03:00:00.000Z"},
-        ]
-        card = mock.Mock(status_code=200, ok=True,
-                         text="---\nlicense: mit\n---\n# Model 2\n![logo](a.png) A [fast](x) model.")
+            {"id": "someone-else/Fake", "createdAt": "2026-11-20T04:00:00.000Z"},
+            {"id": "lab/../../evil", "createdAt": "2026-11-20T04:00:00.000Z"},
+            {"id": "lab/a b?x=1", "createdAt": "2026-11-20T04:00:00.000Z"},
+        ])
+        card = _resp(
+                         "---\nlicense: mit\n---\n# Model 2\n![logo](a.png) A [fast](x) model.")
         def get(url, **_):
             return card if url.endswith("README.md") else listing
         with mock.patch("src.fetcher.requests.get", side_effect=get):
@@ -387,6 +412,33 @@ class FetcherTests(unittest.TestCase):
                 [HuggingFaceAuthor(name="Lab", author="lab")], datetime.now(timezone.utc), 5, 500, 5)
         self.assertEqual(items, [])
         self.assertFalse(health[0]["ok"])
+
+    def test_oversized_response_is_refused(self):
+        from unittest import mock
+        from src.fetcher import MAX_RESPONSE_BYTES, _get, ResponseTooLarge
+
+        big = _resp("x" * (MAX_RESPONSE_BYTES + 1))
+        with mock.patch("src.fetcher.requests.get", return_value=big):
+            with self.assertRaises(ResponseTooLarge):
+                _get("https://a.com/feed", timeout=5)
+        declared = _resp("x", headers={"Content-Length": str(MAX_RESPONSE_BYTES + 1)})
+        with mock.patch("src.fetcher.requests.get", return_value=declared):
+            with self.assertRaises(ResponseTooLarge):
+                _get("https://a.com/feed", timeout=5)
+
+    def test_webhook_url_never_appears_in_errors(self):
+        from unittest import mock
+        import requests
+        from src.notifier import post_payload
+
+        secret = "https://hooks.slack.com/services/T000/B000/SECRET"
+        err = requests.ConnectionError(f"Max retries exceeded with url: {secret}")
+        with mock.patch("src.notifier.requests.post", side_effect=err):
+            with self.assertRaises(RuntimeError) as ctx:
+                post_payload({"text": "x"}, secret, dry_run=False)
+        self.assertNotIn("SECRET", str(ctx.exception))
+        self.assertIsNone(ctx.exception.__cause__)
+        self.assertTrue(ctx.exception.__suppress_context__)
 
     def test_dates_without_time_are_shown_without_time(self):
         from zoneinfo import ZoneInfo

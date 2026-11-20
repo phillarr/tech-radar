@@ -54,6 +54,31 @@ def _clean_text(text: str, max_chars: int) -> str:
     return text if len(text) <= max_chars else text[:max_chars].rstrip() + "…"
 
 
+MAX_RESPONSE_BYTES = 10_000_000  # a feed, sitemap or page larger than this is refused
+
+
+class ResponseTooLarge(requests.RequestException):
+    pass
+
+
+def _get(url: str, **kwargs) -> requests.Response:
+    """requests.get with a size cap, so a broken or hostile source cannot exhaust memory."""
+    resp = requests.get(url, stream=True, **kwargs)
+    try:
+        declared = resp.headers.get("Content-Length")
+        if declared and declared.isdigit() and int(declared) > MAX_RESPONSE_BYTES:
+            raise ResponseTooLarge(f"response larger than {MAX_RESPONSE_BYTES} bytes")
+        body = b""
+        for chunk in resp.iter_content(64 * 1024):
+            body += chunk
+            if len(body) > MAX_RESPONSE_BYTES:
+                raise ResponseTooLarge(f"response larger than {MAX_RESPONSE_BYTES} bytes")
+        resp._content = body
+    finally:
+        resp.close()
+    return resp
+
+
 def _absolute(link: str, site: str) -> str:
     """Some feeds (e.g. HBR) give site-relative links: resolve them against the site."""
     return link if urlparse(link).scheme else urljoin(site, link)
@@ -89,7 +114,7 @@ def fetch_github_releases(
         name, page = f"GitHub · {repo}", f"https://github.com/{repo}/releases"
         url = f"{GITHUB_API}/repos/{repo}/releases/latest"
         try:
-            resp = requests.get(url, headers=headers, timeout=timeout)
+            resp = _get(url, headers=headers, timeout=timeout)
             if resp.status_code == 404:
                 logger.info("No published release for %s", repo)
                 health.append(_health(name, page, "github", "OFFICIAL"))
@@ -139,7 +164,7 @@ def fetch_cisa_kev(
         return _health(KEV_NAME, KEV_PAGE, "github", "OFFICIAL", **kw)
 
     try:
-        resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=timeout)
+        resp = _get(url, headers={"User-Agent": USER_AGENT}, timeout=timeout)
         resp.raise_for_status()
         entries = resp.json()["vulnerabilities"]
     except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
@@ -201,7 +226,7 @@ def fetch_rss_feeds(
     for feed in feeds:
         feed_url = str(feed.url)
         try:
-            resp = requests.get(feed_url, headers={"User-Agent": USER_AGENT}, timeout=timeout)
+            resp = _get(feed_url, headers={"User-Agent": USER_AGENT}, timeout=timeout)
             resp.raise_for_status()
         except requests.RequestException as exc:
             logger.warning("RSS fetch failed for %s: %s", feed.name, exc)
@@ -278,30 +303,38 @@ def fetch_sitemaps(
             return _health(sm.name, sm_url, "rss", sm.type, **kw)
 
         try:
-            resp = requests.get(sm_url, headers={"User-Agent": USER_AGENT}, timeout=timeout)
+            resp = _get(sm_url, headers={"User-Agent": USER_AGENT}, timeout=timeout)
             resp.raise_for_status()
         except requests.RequestException as exc:
             logger.warning("Sitemap fetch failed for %s: %s", sm.name, exc)
             health.append(h(ok=False, error=str(exc)))
             continue
 
+        # Only pages of the sitemap's own site are opened: a tampered sitemap must not make
+        # the agent request other hosts (internal addresses included) or other schemes.
+        host = urlparse(sm_url).hostname
         candidates = []
         for loc, lastmod in _LOC_RE.findall(resp.text):
             modified = _parse_iso8601(lastmod)
             if modified is None or modified < cutoff:
                 continue
             loc = unescape(loc)
-            if any(urlparse(loc).path.startswith(prefix) for prefix in sm.include):
+            parts = urlparse(loc)
+            if parts.scheme != "https" or parts.hostname != host:
+                continue
+            if any(parts.path.startswith(prefix) for prefix in sm.include):
                 candidates.append((modified, loc))
         candidates.sort(reverse=True)
 
         found: List[Tuple[datetime, RawItem]] = []
         for _, page_url in candidates[:MAX_SITEMAP_PAGES]:
             try:
-                page = requests.get(page_url, headers={"User-Agent": USER_AGENT}, timeout=timeout)
+                page = _get(page_url, headers={"User-Agent": USER_AGENT}, timeout=timeout)
                 page.raise_for_status()
             except requests.RequestException as exc:
                 logger.info("Sitemap page skipped (%s): %s", page_url, exc)
+                continue
+            if urlparse(page.url).hostname != host:  # redirected to another site
                 continue
             meta = _page_meta(page.text)
             published = _parse_iso8601(meta.get("article:published_time"))
@@ -325,6 +358,7 @@ def fetch_sitemaps(
 
 
 HF_API = "https://huggingface.co/api/models"
+_HF_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,95}")
 _FRONT_MATTER_RE = re.compile(r"\A---\s*\n.*?\n---\s*\n", re.DOTALL)
 _MD_IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 _MD_LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
@@ -333,6 +367,13 @@ _MD_LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 def _model_card_text(card: str) -> str:
     card = _FRONT_MATTER_RE.sub("", card)
     return _MD_LINK_RE.sub(r"\1", _MD_IMAGE_RE.sub(" ", card)).replace("#", " ")
+
+
+def _is_model_of(model_id: object, author: str) -> bool:
+    if not isinstance(model_id, str) or "/" not in model_id:
+        return False
+    owner, name = model_id.split("/", 1)
+    return owner == author and bool(_HF_NAME_RE.fullmatch(name)) and ".." not in name
 
 
 def fetch_huggingface_models(
@@ -352,7 +393,7 @@ def fetch_huggingface_models(
         name, page = f"Hugging Face · {org.name}", f"https://huggingface.co/{org.author}"
         # The schema's source kind is 'rss' or 'github': a model listing is closest to a feed.
         try:
-            resp = requests.get(
+            resp = _get(
                 HF_API, headers=headers, timeout=timeout,
                 params={"author": org.author, "sort": "createdAt", "direction": "-1",
                         "limit": str(max_items * 2)},
@@ -366,8 +407,10 @@ def fetch_huggingface_models(
             health.append(_health(name, page, "rss", "OFFICIAL", ok=False, error=str(exc)))
             continue
 
+        # A model is official only if it belongs to the organization itself, and its id is
+        # used in URLs: anything other than "<author>/<plain name>" is ignored.
         dated = [(d, m) for m in models
-                 if isinstance(m, dict) and m.get("id")
+                 if isinstance(m, dict) and _is_model_of(m.get("id"), org.author)
                  and (d := _parse_iso8601(m.get("createdAt"))) is not None]
         recent = sorted(((d, m) for d, m in dated if d >= cutoff), key=lambda p: p[0], reverse=True)
         selected = recent[:max_items]
@@ -378,8 +421,8 @@ def fetch_huggingface_models(
             model_id = model["id"]
             card = ""
             try:
-                card_resp = requests.get(f"https://huggingface.co/{model_id}/raw/main/README.md",
-                                         headers=headers, timeout=timeout)
+                card_resp = _get(f"https://huggingface.co/{model_id}/raw/main/README.md",
+                                 headers=headers, timeout=timeout)
                 if card_resp.ok:
                     card = _model_card_text(card_resp.text)
             except requests.RequestException as exc:

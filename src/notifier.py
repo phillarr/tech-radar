@@ -186,7 +186,12 @@ def post_payload(payload: Dict[str, Any], webhook_url: str, dry_run: bool) -> bo
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         logger.info("DRY_RUN enabled: Slack payload printed, not posted")
         return False
-    resp = requests.post(webhook_url, json=payload, timeout=15)
+    try:
+        resp = requests.post(webhook_url, json=payload, timeout=15)
+    except requests.RequestException as exc:
+        # The webhook URL is a secret and requests puts it in its error messages: the logs
+        # (public for a public repository) only get the error type.
+        raise RuntimeError(f"Slack webhook request failed: {type(exc).__name__}") from None
     if resp.status_code != 200:
         raise RuntimeError(f"Slack webhook returned {resp.status_code}: {resp.text[:200]}")
     return True
