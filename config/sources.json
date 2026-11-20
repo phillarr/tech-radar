@@ -32,6 +32,7 @@
       { "name": "NVIDIA Newsroom", "url": "https://nvidianews.nvidia.com/releases.xml", "type": "OFFICIAL" },
       { "name": "AMD Press Releases", "url": "https://ir.amd.com/rss/news-releases.xml", "type": "OFFICIAL" },
       { "name": "Meta Newsroom", "url": "https://about.fb.com/feed/", "type": "OFFICIAL" },
+      { "name": "Meta Engineering", "url": "https://engineering.fb.com/feed/", "type": "OFFICIAL" },
       { "name": "Hugging Face Blog", "url": "https://huggingface.co/blog/feed.xml", "type": "OFFICIAL" },
       { "name": "Microsoft Source (news)", "url": "https://news.microsoft.com/source/feed/", "type": "OFFICIAL", "max_items": 10 },
       { "name": "Official Microsoft Blog", "url": "https://blogs.microsoft.com/feed/", "type": "OFFICIAL" },
@@ -80,7 +81,8 @@
       { "name": "Qwen", "author": "Qwen" },
       { "name": "Kimi (Moonshot AI)", "author": "moonshotai" },
       { "name": "MiniMax", "author": "MiniMaxAI" },
-      { "name": "GLM (Z.ai)", "author": "zai-org" }
+      { "name": "GLM (Z.ai)", "author": "zai-org" },
+      { "name": "Meta (research models)", "author": "facebook" }
     ],
     "reading_feeds": [
       { "name": "Harvard Business Review", "url": "http://feeds.hbr.org/harvardbusiness", "type": "MEDIA", "max_items": 30 }

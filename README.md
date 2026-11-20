@@ -1,7 +1,7 @@
 # Tech Radar
 
 An autonomous technology intelligence agent. Every morning it collects news from about
-55 official, media and research sources, asks Claude to turn them into a short
+60 official, media and research sources, asks Claude to turn them into a short
 set of evidence-based events and signals, and posts the digest to Slack.
 
 It covers AI product management, AI engineering, cloud and infrastructure,
@@ -135,8 +135,9 @@ Everything is configured in [`config/sources.json`](config/sources.json):
   (`article:published_time`) is recent, since a sitemap's modification dates also change
   when old pages are edited;
 - `sources.huggingface_authors`: labs whose official Hugging Face organization is their
-  release channel for open models (DeepSeek, Qwen, Kimi, MiniMax, GLM). Each model created
-  in the lookback window becomes an official item, described by its model card;
+  release channel for open models (DeepSeek, Qwen, Kimi, MiniMax, GLM, Meta research).
+  Each model created in the lookback window becomes an official item, described by its
+  model card;
 - `sources.reading_feeds`: analysis and commentary feeds, used only by the Weekly Radar.
 
 ## Running
