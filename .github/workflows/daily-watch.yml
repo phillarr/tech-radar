@@ -55,11 +55,11 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.txt pytest==9.2.0
 
       - name: Run non-regression tests
         if: steps.gate.outputs.run == 'true'
-        run: python -m unittest discover tests
+        run: python -m pytest -q
 
       - name: Execute Daily Watch Agent
         if: steps.gate.outputs.run == 'true'
@@ -72,3 +72,13 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run || false }}
           SCHEDULED: ${{ inputs.scheduled == true }}
         run: python -m src.main
+
+      # Unattended runs only: a manual run shows its failure in the Actions tab.
+      - name: Alert Slack that the Daily Watch failed
+        if: failure() && inputs.scheduled == true
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          payload=$(jq -n --arg url "$RUN_URL" '{text: ("⚠️ The Daily Watch failed today, so no digest was posted. Logs: " + $url)}')
+          curl -sS --fail --max-time 20 -H 'Content-Type: application/json' -d "$payload" "$SLACK_WEBHOOK_URL" > /dev/null

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -20,37 +20,39 @@ class RSSSource(BaseModel):
     name: str
     url: HttpUrl
     type: SourceType
-    max_items: Optional[int] = Field(default=None, gt=0)  # overrides settings.max_items_per_source
+    max_items: int | None = Field(default=None, gt=0)  # overrides settings.max_items_per_source
 
 
 class SitemapSource(BaseModel):
     """A site without an RSS feed: its sitemap lists the pages, each page gives its date."""
+
     name: str
     url: HttpUrl  # the sitemap.xml
     type: SourceType
-    include: List[str] = Field(min_length=1)  # URL path prefixes to follow, e.g. "/news/"
-    max_items: Optional[int] = Field(default=None, gt=0)
+    include: list[str] = Field(min_length=1)  # URL path prefixes to follow, e.g. "/news/"
+    max_items: int | None = Field(default=None, gt=0)
 
 
 class HuggingFaceAuthor(BaseModel):
     """A lab's official Hugging Face organization: each new model it publishes is an item."""
+
     name: str  # display name, e.g. "DeepSeek"
     author: str  # the organization's id on Hugging Face, e.g. "deepseek-ai"
 
 
 class SourcesConfig(BaseModel):
-    github_repositories: List[str] = Field(default_factory=list)
-    rss_feeds: List[RSSSource] = Field(default_factory=list)
-    sitemaps: List[SitemapSource] = Field(default_factory=list)
-    huggingface_authors: List[HuggingFaceAuthor] = Field(default_factory=list)
+    github_repositories: list[str] = Field(default_factory=list)
+    rss_feeds: list[RSSSource] = Field(default_factory=list)
+    sitemaps: list[SitemapSource] = Field(default_factory=list)
+    huggingface_authors: list[HuggingFaceAuthor] = Field(default_factory=list)
     # CISA Known Exploited Vulnerabilities catalog (JSON); unset to disable.
-    cisa_kev_url: Optional[HttpUrl] = None
+    cisa_kev_url: HttpUrl | None = None
     # Analysis and commentary, used only by the Weekly Radar's "Worth reading" section.
-    reading_feeds: List[RSSSource] = Field(default_factory=list)
+    reading_feeds: list[RSSSource] = Field(default_factory=list)
 
     @field_validator("github_repositories")
     @classmethod
-    def _validate_repo_slugs(cls, repos: List[str]) -> List[str]:
+    def _validate_repo_slugs(cls, repos: list[str]) -> list[str]:
         for repo in repos:
             parts = repo.split("/")
             if len(parts) != 2 or not all(parts):
@@ -81,9 +83,9 @@ class EnvSecrets(BaseSettings):
 
     anthropic_api_key: str
     slack_webhook_url: str
-    github_token: Optional[str] = None
-    supabase_url: Optional[str] = None  # storage is optional: unset means no history
-    supabase_service_key: Optional[str] = None
+    github_token: str | None = None
+    supabase_url: str | None = None  # storage is optional: unset means no history
+    supabase_service_key: str | None = None
     config_path: str = "config/sources.json"
     dry_run: bool = False
     scheduled: bool = False  # true for cron runs: at most one digest per day
@@ -103,5 +105,6 @@ def load_app_config(config_path: str) -> AppConfig:
 
 
 def load_all() -> tuple[EnvSecrets, AppConfig]:
-    secrets = EnvSecrets()
+    # The required fields come from the environment, which mypy cannot see.
+    secrets = EnvSecrets()  # type: ignore[call-arg]
     return secrets, load_app_config(secrets.config_path)

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import UTC, datetime
+from typing import Any
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
@@ -75,11 +75,11 @@ def _link(url: str, label: str) -> str:
     return f"<{_escape(url).replace('|', '%7C')}|{text}>"
 
 
-def _section(text: str) -> Dict[str, Any]:
+def _section(text: str) -> dict[str, Any]:
     return {"type": "section", "text": {"type": "mrkdwn", "text": text[:MAX_SECTION_CHARS]}}
 
 
-def _context(text: str) -> Dict[str, Any]:
+def _context(text: str) -> dict[str, Any]:
     return {"type": "context", "elements": [{"type": "mrkdwn", "text": text}]}
 
 
@@ -92,7 +92,7 @@ def _local_time(iso: str, tz: ZoneInfo) -> str:
         return ""
 
 
-def _event_block(event: IntelligenceEvent, tz: ZoneInfo) -> Dict[str, Any]:
+def _event_block(event: IntelligenceEvent, tz: ZoneInfo) -> dict[str, Any]:
     primary = event.sources[0]
     lines = [
         f"*{BADGES[event.priority]}* {_link(primary.url, event.title)}",
@@ -118,7 +118,7 @@ def _event_block(event: IntelligenceEvent, tz: ZoneInfo) -> Dict[str, Any]:
     return _section("\n".join(lines))
 
 
-def _signal_block(signal: Signal, label_of: Dict[str, str]) -> Dict[str, Any]:
+def _signal_block(signal: Signal, label_of: dict[str, str]) -> dict[str, Any]:
     evidence = " · ".join(_link(url, label_of.get(url, "source")) for url in signal.evidence_urls)
     return _section(
         f"*Signal:* {_escape(signal.signal)} _({SIGNAL_LEVELS[signal.evidence_level]})_\n"
@@ -128,15 +128,15 @@ def _signal_block(signal: Signal, label_of: Dict[str, str]) -> Dict[str, Any]:
     )
 
 
-def build_payload(report: DailyReport, tz_name: str = "Europe/Paris") -> Dict[str, Any]:
+def build_payload(report: DailyReport, tz_name: str = "Europe/Paris") -> dict[str, Any]:
     tz = ZoneInfo(tz_name)
-    today = datetime.now(timezone.utc).astimezone(tz).strftime("%A %d %B %Y")
+    today = datetime.now(UTC).astimezone(tz).strftime("%A %d %B %Y")
     counts = "   ".join(
         f"{badge} {sum(e.priority == level for e in report.events)}"
         for level, badge in BADGES.items()
     )
 
-    blocks: List[Dict[str, Any]] = [
+    blocks: list[dict[str, Any]] = [
         {"type": "header", "text": {"type": "plain_text", "text": f"☕ Tech Watch — {today}"}},
         _section(f"*Today's intelligence*\n{_escape(report.intro)}"),
         _context(counts),
@@ -145,11 +145,13 @@ def build_payload(report: DailyReport, tz_name: str = "Europe/Paris") -> Dict[st
         blocks.append(_section("_Nothing actionable today._"))
 
     # Categories appear in the order of their best-ranked event.
-    groups: Dict[str, List[IntelligenceEvent]] = {}
+    groups: dict[str, list[IntelligenceEvent]] = {}
     for event in report.events:
         groups.setdefault(event.category, []).append(event)
 
-    budget = MAX_BLOCKS - (2 + len(report.signals) if report.signals else 0) - 4  # "…and more", legend, AI notice, footer
+    budget = (
+        MAX_BLOCKS - (2 + len(report.signals) if report.signals else 0) - 4
+    )  # "…and more", legend, AI notice, footer
     shown = 0
     for category, events in groups.items():
         if len(blocks) + 3 > budget:
@@ -180,7 +182,7 @@ def build_payload(report: DailyReport, tz_name: str = "Europe/Paris") -> Dict[st
     }
 
 
-def post_payload(payload: Dict[str, Any], webhook_url: str, dry_run: bool) -> bool:
+def post_payload(payload: dict[str, Any], webhook_url: str, dry_run: bool) -> bool:
     """Post a Block Kit payload, or print it on a dry run. Returns True when posted."""
     if dry_run:
         print(json.dumps(payload, ensure_ascii=False, indent=2))

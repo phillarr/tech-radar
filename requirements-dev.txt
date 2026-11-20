@@ -1,0 +1,5 @@
+# Development tools, pinned like requirements.txt (CI installs both).
+mypy==2.4.1
+pytest==9.2.0
+ruff==0.17.6
+types-requests==2.33.0.20261030

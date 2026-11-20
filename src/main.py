@@ -8,11 +8,7 @@ from __future__ import annotations
 import logging
 import sys
 from datetime import datetime
-from pathlib import Path
 from zoneinfo import ZoneInfo
-
-if __package__ in (None, ""):  # allow `python src/main.py` as well
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.analyzer import DailyReport, analyze
 from src.config_loader import load_all
@@ -45,7 +41,9 @@ def run() -> int:
             items, dropped, updates = filter_already_published(items, published)
             logger.info(
                 "History: %d item(s) already published and unchanged, %d update(s) of "
-                "published items", dropped, updates,
+                "published items",
+                dropped,
+                updates,
             )
 
     if not items:
@@ -68,7 +66,10 @@ def run() -> int:
     covered = sum(len(e.sources) for e in report.events)
     logger.info(
         "Analysis kept %d event(s) covering %d of %d item(s), %d signal(s)",
-        len(report.events), covered, len(items), len(report.signals),
+        len(report.events),
+        covered,
+        len(items),
+        len(report.signals),
     )
     analysis_id = store.record_analysis(report, len(items), secrets.dry_run) if store else None
 
@@ -85,7 +86,9 @@ def run() -> int:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
     try:
         sys.exit(run())
     except Exception:

@@ -23,7 +23,7 @@ cybersecurity, startups, research and AI governance.
 ```
 Supabase pg_cron (08:05 Europe/Paris) ──▶ GitHub Actions
   │
-  ├─ fetch      feeds, releases, new models from the last 24 h      src/fetcher.py
+  ├─ fetch      feeds, releases, new models from the last 24 h      src/fetcher/
   ├─ store      sources health and articles in Supabase (optional)  src/storage.py
   ├─ dedupe     skip articles already published unchanged
   ├─ analyze    Claude groups items into events, scores them        src/analyzer.py
@@ -173,16 +173,21 @@ cp .env.example .env                                # then fill in the values
 DRY_RUN=true python -m src.main
 ```
 
-### Tests
+### Tests and checks
 
 ```bash
-python -m unittest discover tests
+pip install -r requirements-dev.txt
+python -m pytest -q        # tests
+ruff check . && ruff format --check .   # lint and formatting
+mypy                       # type check of src/
 ```
 
 The tests run without network access and without calling Claude. They replay mistakes
 seen in real digests (duplicate events, media cited instead of the official source,
 over-ranked resolved incidents) and check deduplication, priorities, Slack rendering
-and the rows written to Supabase. They also run in CI before each digest.
+and the rows written to Supabase. The CI workflow runs all four checks on every push
+and pull request, and the tests also run before each digest. If a scheduled run
+fails, a short alert with a link to the logs is posted to the same Slack channel.
 
 ## Project layout
 
@@ -191,13 +196,15 @@ config/sources.json        sources and settings
 db/schema.sql              Supabase schema
 db/scheduler.sql           Supabase scheduler (pg_cron) that starts the workflows
 src/config_loader.py       configuration and secrets (Pydantic)
-src/fetcher.py             RSS, sitemap, Hugging Face and GitHub ingestion, per-source health
+src/fetcher/               ingestion, one module per kind of source (RSS, sitemap,
+                           GitHub releases, Hugging Face, CISA KEV), per-source health
 src/analyzer.py            prompt, output contract, Claude call, validation rules
 src/notifier.py            Slack message
 src/storage.py             Supabase client and cross-day deduplication
 src/weekly.py              Weekly Radar
 src/main.py                pipeline
-tests/                     unit tests
+tests/                     unit tests (no network, no API call)
+pyproject.toml             project metadata, ruff, mypy and pytest settings
 ```
 
 ## Roadmap

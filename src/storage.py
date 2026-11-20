@@ -9,8 +9,8 @@ from __future__ import annotations
 import functools
 import hashlib
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import requests
 
@@ -36,14 +36,14 @@ def content_hash(item: RawItem) -> str:
 
 
 def filter_already_published(
-    items: List[RawItem], published: Dict[str, str]
-) -> Tuple[List[RawItem], int, int]:
+    items: list[RawItem], published: dict[str, str]
+) -> tuple[list[RawItem], int, int]:
     """Drop items already published unchanged; flag changed ones as updates.
 
     `published` maps url -> content hash at publication time.
     Returns (kept items, number dropped, number flagged as update).
     """
-    kept: List[RawItem] = []
+    kept: list[RawItem] = []
     dropped = updates = 0
     for item in items:
         previous = published.get(item["url"])
@@ -57,7 +57,7 @@ def filter_already_published(
     return kept, dropped, updates
 
 
-def next_source_status(ok: bool, previous_failures: int) -> Tuple[str, int]:
+def next_source_status(ok: bool, previous_failures: int) -> tuple[str, int]:
     """Return (status, consecutive_failures) after one fetch attempt."""
     if ok:
         return "ACTIVE", 0
@@ -69,12 +69,12 @@ def next_source_status(ok: bool, previous_failures: int) -> Tuple[str, int]:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _best_effort(fn):
     @functools.wraps(fn)
-    def wrapper(self: "Storage", *args, **kwargs):
+    def wrapper(self: Storage, *args, **kwargs):
         try:
             return fn(self, *args, **kwargs)
         except (StorageError, requests.RequestException, ValueError) as exc:
@@ -95,7 +95,7 @@ class Storage:
         self.session.headers.update(headers)
 
     @classmethod
-    def connect(cls, url: Optional[str], key: Optional[str]) -> Optional["Storage"]:
+    def connect(cls, url: str | None, key: str | None) -> Storage | None:
         """Return a working client, or None (with a clear log line) if storage is unusable."""
         if not url and not key:
             logger.info("Supabase not configured: running without history")
@@ -117,9 +117,9 @@ class Storage:
         self,
         method: str,
         table: str,
-        params: Optional[Dict[str, str]] = None,
+        params: dict[str, str] | None = None,
         body: Any = None,
-        prefer: Optional[str] = None,
+        prefer: str | None = None,
     ) -> Any:
         resp = self.session.request(
             method,
@@ -130,14 +130,16 @@ class Storage:
             timeout=self.timeout,
         )
         if resp.status_code in (401, 403):
-            raise StorageError(f"key rejected (HTTP {resp.status_code}): check SUPABASE_SERVICE_KEY")
+            raise StorageError(
+                f"key rejected (HTTP {resp.status_code}): check SUPABASE_SERVICE_KEY"
+            )
         if resp.status_code == 404 and "PGRST205" in resp.text:
             raise StorageError(f"table '{table}' not found: run db/schema.sql in Supabase")
         if resp.status_code >= 300:
             raise StorageError(f"{method} {table}: HTTP {resp.status_code} {resp.text[:300]}")
         return resp.json() if resp.content else None
 
-    def _upsert(self, table: str, rows: List[Dict[str, Any]], on_conflict: str) -> None:
+    def _upsert(self, table: str, rows: list[dict[str, Any]], on_conflict: str) -> None:
         if rows:
             self._request(
                 "POST",
@@ -147,21 +149,26 @@ class Storage:
                 prefer="resolution=merge-duplicates,return=minimal",
             )
 
-    def _insert(self, table: str, rows: List[Dict[str, Any]], returning: bool = False) -> Any:
+    def _insert(self, table: str, rows: list[dict[str, Any]], returning: bool = False) -> Any:
         if not rows:
             return []
         return self._request(
-            "POST", table, body=rows,
+            "POST",
+            table,
+            body=rows,
             prefer="return=representation" if returning else "return=minimal",
         )
 
     # --- Ingestion ---------------------------------------------------------------------------
 
     @_best_effort
-    def record_sources(self, health: List[SourceHealth]) -> None:
-        rows = self._request(
-            "GET", "sources", params={"select": "name,consecutive_failures,last_item_at"}
-        ) or []
+    def record_sources(self, health: list[SourceHealth]) -> None:
+        rows = (
+            self._request(
+                "GET", "sources", params={"select": "name,consecutive_failures,last_item_at"}
+            )
+            or []
+        )
         previous = {r["name"]: r for r in rows}
         now = _now()
         ok_rows, failed_rows = [], []
@@ -169,8 +176,13 @@ class Storage:
             prev = previous.get(h["name"], {})
             status, failures = next_source_status(h["ok"], prev.get("consecutive_failures") or 0)
             row = {
-                "name": h["name"], "url": h["url"], "kind": h["kind"], "type": h["type"],
-                "status": status, "consecutive_failures": failures, "last_checked_at": now,
+                "name": h["name"],
+                "url": h["url"],
+                "kind": h["kind"],
+                "type": h["type"],
+                "status": status,
+                "consecutive_failures": failures,
+                "last_checked_at": now,
             }
             if h["ok"]:
                 cursors = [c for c in (prev.get("last_item_at"), h["last_item_at"]) if c]
@@ -180,26 +192,30 @@ class Storage:
                 failed_rows.append({**row, "last_error": (h["error"] or "")[:500]})
         self._upsert("sources", ok_rows, "name")
         self._upsert("sources", failed_rows, "name")
-        degraded = [r["name"] for r in failed_rows]
+        degraded = [str(r["name"]) for r in failed_rows]
         if degraded:
             logger.info("Sources not ACTIVE this run: %s", ", ".join(degraded))
 
     @_best_effort
-    def record_articles(self, items: List[RawItem]) -> None:
+    def record_articles(self, items: list[RawItem]) -> None:
         now = _now()
         self._upsert("articles", [self._article_row(i, now) for i in items], "url")
 
     @_best_effort
-    def published_hashes(self) -> Dict[str, str]:
-        since = (datetime.now(timezone.utc) - timedelta(days=REPUBLISH_WINDOW_DAYS)).isoformat()
-        rows = self._request(
-            "GET", "articles",
-            params={"select": "url,last_published_hash", "last_published_at": f"gte.{since}"},
-        ) or []
+    def published_hashes(self) -> dict[str, str]:
+        since = (datetime.now(UTC) - timedelta(days=REPUBLISH_WINDOW_DAYS)).isoformat()
+        rows = (
+            self._request(
+                "GET",
+                "articles",
+                params={"select": "url,last_published_hash", "last_published_at": f"gte.{since}"},
+            )
+            or []
+        )
         return {r["url"]: r["last_published_hash"] for r in rows if r["last_published_hash"]}
 
     @staticmethod
-    def _article_row(item: RawItem, now: str) -> Dict[str, Any]:
+    def _article_row(item: RawItem, now: str) -> dict[str, Any]:
         return {
             "url": item["url"],
             "source_name": item["source"],
@@ -215,96 +231,151 @@ class Storage:
 
     @_best_effort
     def posted_since(self, since: datetime, channel: str = "slack") -> bool:
-        rows = self._request("GET", "distributions", params={
-            "select": "id", "status": "eq.POSTED", "channel": f"eq.{channel}",
-            "created_at": f"gte.{since.astimezone(timezone.utc).isoformat()}", "limit": "1",
-        }) or []
+        rows = (
+            self._request(
+                "GET",
+                "distributions",
+                params={
+                    "select": "id",
+                    "status": "eq.POSTED",
+                    "channel": f"eq.{channel}",
+                    "created_at": f"gte.{since.astimezone(UTC).isoformat()}",
+                    "limit": "1",
+                },
+            )
+            or []
+        )
         return bool(rows)
 
     @_best_effort
-    def week_events(self, start: datetime, end: datetime) -> List[Dict[str, Any]]:
+    def week_events(self, start: datetime, end: datetime) -> list[dict[str, Any]]:
         """Events of the daily digests posted in [start, end), oldest first."""
-        dists = self._request("GET", "distributions", params={
-            "select": "analysis_id,created_at", "channel": "eq.slack", "status": "eq.POSTED",
-            "and": f"(created_at.gte.{start.astimezone(timezone.utc).isoformat()},"
-                   f"created_at.lt.{end.astimezone(timezone.utc).isoformat()})",
-            "order": "created_at.asc",
-        }) or []
+        dists = (
+            self._request(
+                "GET",
+                "distributions",
+                params={
+                    "select": "analysis_id,created_at",
+                    "channel": "eq.slack",
+                    "status": "eq.POSTED",
+                    "and": f"(created_at.gte.{start.astimezone(UTC).isoformat()},"
+                    f"created_at.lt.{end.astimezone(UTC).isoformat()})",
+                    "order": "created_at.asc",
+                },
+            )
+            or []
+        )
         posted_on = {d["analysis_id"]: d["created_at"] for d in dists}
         if not posted_on:
             return []
-        rows = self._request("GET", "events", params={
-            "select": "analysis_id,payload",
-            "analysis_id": f"in.({','.join(posted_on)})",
-        }) or []
+        rows = (
+            self._request(
+                "GET",
+                "events",
+                params={
+                    "select": "analysis_id,payload",
+                    "analysis_id": f"in.({','.join(posted_on)})",
+                },
+            )
+            or []
+        )
         events = [{**r["payload"], "posted_at": posted_on[r["analysis_id"]]} for r in rows]
         return sorted(events, key=lambda e: (e["posted_at"], e["event_id"]))
 
     @_best_effort
-    def record_weekly(self, report: "Any", events_in: int, dry_run: bool) -> None:
-        rows = self._insert("analyses", [{
-            "model": report.model,
-            "prompt_version": report.prompt_version,
-            "stop_reason": report.stop_reason,
-            "input_tokens": report.input_tokens,
-            "output_tokens": report.output_tokens,
-            "items_in": events_in,
-            "events_out": len(report.top_stories),
-            "signals_out": len(report.themes),
-            "dry_run": dry_run,
-        }], returning=True)
-        self._insert("distributions", [{
-            "analysis_id": rows[0]["id"],
-            "channel": "slack_weekly",
-            "status": "DRY_RUN" if dry_run else "POSTED",
-            "event_ids": [t.event_id for t in report.top_stories],
-        }])
+    def record_weekly(self, report: Any, events_in: int, dry_run: bool) -> None:
+        rows = self._insert(
+            "analyses",
+            [
+                {
+                    "model": report.model,
+                    "prompt_version": report.prompt_version,
+                    "stop_reason": report.stop_reason,
+                    "input_tokens": report.input_tokens,
+                    "output_tokens": report.output_tokens,
+                    "items_in": events_in,
+                    "events_out": len(report.top_stories),
+                    "signals_out": len(report.themes),
+                    "dry_run": dry_run,
+                }
+            ],
+            returning=True,
+        )
+        self._insert(
+            "distributions",
+            [
+                {
+                    "analysis_id": rows[0]["id"],
+                    "channel": "slack_weekly",
+                    "status": "DRY_RUN" if dry_run else "POSTED",
+                    "event_ids": [t.event_id for t in report.top_stories],
+                }
+            ],
+        )
 
     @_best_effort
-    def record_analysis(self, report: DailyReport, items_in: int, dry_run: bool) -> Optional[str]:
-        rows = self._insert("analyses", [{
-            "model": report.model,
-            "prompt_version": report.prompt_version,
-            "stop_reason": report.stop_reason,
-            "input_tokens": report.input_tokens,
-            "output_tokens": report.output_tokens,
-            "items_in": items_in,
-            "events_out": len(report.events),
-            "signals_out": len(report.signals),
-            "dry_run": dry_run,
-        }], returning=True)
+    def record_analysis(self, report: DailyReport, items_in: int, dry_run: bool) -> str | None:
+        rows = self._insert(
+            "analyses",
+            [
+                {
+                    "model": report.model,
+                    "prompt_version": report.prompt_version,
+                    "stop_reason": report.stop_reason,
+                    "input_tokens": report.input_tokens,
+                    "output_tokens": report.output_tokens,
+                    "items_in": items_in,
+                    "events_out": len(report.events),
+                    "signals_out": len(report.signals),
+                    "dry_run": dry_run,
+                }
+            ],
+            returning=True,
+        )
         analysis_id = rows[0]["id"]
 
-        self._insert("events", [{
-            "analysis_id": analysis_id,
-            "event_id": e.event_id,
-            "title": e.title,
-            "category": e.category,
-            "secondary_categories": e.secondary_categories,
-            "event_type": e.event_type,
-            "priority": e.priority,
-            "evidence_status": e.evidence_status,
-            "source_type": e.source_type,
-            "primary_url": e.sources[0].url,
-            "relevance": e.scores.relevance,
-            "impact": e.scores.impact,
-            "urgency": e.scores.urgency,
-            "payload": e.model_dump(mode="json"),
-        } for e in report.events])
+        self._insert(
+            "events",
+            [
+                {
+                    "analysis_id": analysis_id,
+                    "event_id": e.event_id,
+                    "title": e.title,
+                    "category": e.category,
+                    "secondary_categories": e.secondary_categories,
+                    "event_type": e.event_type,
+                    "priority": e.priority,
+                    "evidence_status": e.evidence_status,
+                    "source_type": e.source_type,
+                    "primary_url": e.sources[0].url,
+                    "relevance": e.scores.relevance,
+                    "impact": e.scores.impact,
+                    "urgency": e.scores.urgency,
+                    "payload": e.model_dump(mode="json"),
+                }
+                for e in report.events
+            ],
+        )
 
-        self._insert("signals", [{
-            "analysis_id": analysis_id,
-            "signal": s.signal,
-            "evidence_level": s.evidence_level,
-            "evidence_urls": s.evidence_urls,
-            "interpretation": s.interpretation,
-            "what_to_watch": s.what_to_watch,
-        } for s in report.signals])
+        self._insert(
+            "signals",
+            [
+                {
+                    "analysis_id": analysis_id,
+                    "signal": s.signal,
+                    "evidence_level": s.evidence_level,
+                    "evidence_urls": s.evidence_urls,
+                    "interpretation": s.interpretation,
+                    "what_to_watch": s.what_to_watch,
+                }
+                for s in report.signals
+            ],
+        )
         return analysis_id
 
     @_best_effort
     def record_outcome(
-        self, items: List[RawItem], report: DailyReport, analysis_id: Optional[str], posted: bool
+        self, items: list[RawItem], report: DailyReport, analysis_id: str | None, posted: bool
     ) -> None:
         """Update article statuses and log the distribution."""
         now = _now()
@@ -312,26 +383,42 @@ class Storage:
 
         selected = [i for i in items if i["url"] in event_of]
         rejected = [i for i in items if i["url"] not in event_of]
-        self._upsert("articles", [
-            {**self._article_row(i, now), "status": "REJECTED"} for i in rejected
-        ], "url")
+        self._upsert(
+            "articles",
+            [{**self._article_row(i, now), "status": "REJECTED"} for i in rejected],
+            "url",
+        )
         if posted:
-            self._upsert("articles", [{
-                **self._article_row(i, now),
-                "status": "PUBLISHED",
-                "last_published_hash": content_hash(i),
-                "last_published_at": now,
-                "last_event_id": event_of[i["url"]],
-            } for i in selected], "url")
+            self._upsert(
+                "articles",
+                [
+                    {
+                        **self._article_row(i, now),
+                        "status": "PUBLISHED",
+                        "last_published_hash": content_hash(i),
+                        "last_published_at": now,
+                        "last_event_id": event_of[i["url"]],
+                    }
+                    for i in selected
+                ],
+                "url",
+            )
         else:
-            self._upsert("articles", [
-                {**self._article_row(i, now), "status": "ANALYZED"} for i in selected
-            ], "url")
+            self._upsert(
+                "articles",
+                [{**self._article_row(i, now), "status": "ANALYZED"} for i in selected],
+                "url",
+            )
 
         if analysis_id:
-            self._insert("distributions", [{
-                "analysis_id": analysis_id,
-                "channel": "slack",
-                "status": "POSTED" if posted else "DRY_RUN",
-                "event_ids": [e.event_id for e in report.events],
-            }])
+            self._insert(
+                "distributions",
+                [
+                    {
+                        "analysis_id": analysis_id,
+                        "channel": "slack",
+                        "status": "POSTED" if posted else "DRY_RUN",
+                        "event_ids": [e.event_id for e in report.events],
+                    }
+                ],
+            )

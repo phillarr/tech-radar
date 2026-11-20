@@ -11,13 +11,9 @@ import json
 import logging
 import sys
 from collections import Counter
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, datetime, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo
-
-if __package__ in (None, ""):  # allow `python src/weekly.py` as well
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -25,8 +21,17 @@ from src.analyzer import AnalysisError, _Strict, call_structured
 from src.config_loader import load_all
 from src.fetcher import RawItem, fetch_rss_feeds
 from src.notifier import (
-    AI_NOTICE, BADGES, CATEGORIES, EVIDENCE, EVIDENCE_LEGEND, MAX_BLOCKS, _context, _escape, _link,
-    _section, post_payload,
+    AI_NOTICE,
+    BADGES,
+    CATEGORIES,
+    EVIDENCE,
+    EVIDENCE_LEGEND,
+    MAX_BLOCKS,
+    _context,
+    _escape,
+    _link,
+    _section,
+    post_payload,
 )
 from src.storage import Storage
 
@@ -81,7 +86,7 @@ class TopStory(_Strict):
 class Theme(_Strict):
     title: str
     synthesis: str
-    event_ids: List[str]
+    event_ids: list[str]
     what_to_watch: str
 
 
@@ -92,9 +97,9 @@ class Reading(_Strict):
 
 class WeeklyOutput(_Strict):
     intro: str
-    top_stories: List[TopStory]
-    themes: List[Theme]
-    worth_reading: List[Reading]
+    top_stories: list[TopStory]
+    themes: list[Theme]
+    worth_reading: list[Reading]
 
 
 WEEKLY_SCHEMA = WeeklyOutput.model_json_schema()
@@ -118,7 +123,7 @@ class ResolvedTheme(BaseModel):
     title: str
     synthesis: str
     what_to_watch: str
-    stories: List[StoryRef]
+    stories: list[StoryRef]
 
 
 class ResolvedReading(BaseModel):
@@ -131,10 +136,10 @@ class ResolvedReading(BaseModel):
 class WeeklyReport(BaseModel):
     week_label: str
     intro: str
-    top_stories: List[StoryRef]
-    themes: List[ResolvedTheme]
-    reading: List[ResolvedReading]
-    stats: Dict[str, Any] = Field(default_factory=dict)
+    top_stories: list[StoryRef]
+    themes: list[ResolvedTheme]
+    reading: list[ResolvedReading]
+    stats: dict[str, Any] = Field(default_factory=dict)
     model: str = ""
     stop_reason: str = ""
     input_tokens: int = 0
@@ -145,7 +150,7 @@ class WeeklyReport(BaseModel):
 # --- Pure helpers (unit tested) --------------------------------------------------------------
 
 
-def week_window(now: datetime, tz_name: str, calendar_week: bool) -> Tuple[datetime, datetime]:
+def week_window(now: datetime, tz_name: str, calendar_week: bool) -> tuple[datetime, datetime]:
     """Return [start, end).
 
     Scheduled runs cover the previous calendar week, Monday 00:00 to Monday 00:00 local
@@ -172,7 +177,7 @@ def _plural(n: int, word: str) -> str:
     return f"{n} {word}{'' if n == 1 else 's'}"
 
 
-def compute_stats(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+def compute_stats(events: list[dict[str, Any]]) -> dict[str, Any]:
     days = {e["posted_at"][:10] for e in events}
     return {
         "events": len(events),
@@ -183,25 +188,30 @@ def compute_stats(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def _story_ref(event: Dict[str, Any], takeaway: str = "") -> StoryRef:
+def _story_ref(event: dict[str, Any], takeaway: str = "") -> StoryRef:
     primary = event["sources"][0]
     return StoryRef(
-        event_id=event["event_id"], title=event["title"], url=primary["url"],
-        priority=event["priority"], evidence_status=event["evidence_status"],
-        category=event["category"], source_name=primary["name"], takeaway=takeaway,
+        event_id=event["event_id"],
+        title=event["title"],
+        url=primary["url"],
+        priority=event["priority"],
+        evidence_status=event["evidence_status"],
+        category=event["category"],
+        source_name=primary["name"],
+        takeaway=takeaway,
     )
 
 
 def postprocess_weekly(
     output: WeeklyOutput,
-    events: List[Dict[str, Any]],
-    reading_items: List[RawItem],
+    events: list[dict[str, Any]],
+    reading_items: list[RawItem],
     label: str,
 ) -> WeeklyReport:
     by_id = {e["event_id"]: e for e in events}
     readings_by_url = {i["url"]: i for i in reading_items}
 
-    top: List[StoryRef] = []
+    top: list[StoryRef] = []
     for story in output.top_stories:
         if story.event_id not in by_id:
             logger.warning("Dropped unknown top story id: %s", story.event_id)
@@ -209,36 +219,49 @@ def postprocess_weekly(
             top.append(_story_ref(by_id[story.event_id], story.takeaway))
     top = top[:MAX_TOP_STORIES]
 
-    themes: List[ResolvedTheme] = []
+    themes: list[ResolvedTheme] = []
     for theme in output.themes:
         ids = [i for i in dict.fromkeys(theme.event_ids) if i in by_id]
         if len(ids) < 2:  # a theme connects at least two stories
             logger.info("Dropped theme with fewer than two known events: %s", theme.title)
             continue
-        themes.append(ResolvedTheme(
-            title=theme.title, synthesis=theme.synthesis, what_to_watch=theme.what_to_watch,
-            stories=[_story_ref(by_id[i]) for i in ids],
-        ))
+        themes.append(
+            ResolvedTheme(
+                title=theme.title,
+                synthesis=theme.synthesis,
+                what_to_watch=theme.what_to_watch,
+                stories=[_story_ref(by_id[i]) for i in ids],
+            )
+        )
     themes = themes[:MAX_THEMES]
 
-    reading: List[ResolvedReading] = []
+    reading: list[ResolvedReading] = []
     for r in output.worth_reading:
         item = readings_by_url.get(r.url)
         if item is None:
             logger.warning("Dropped unknown reading url: %s", r.url)
         elif r.url not in {x.url for x in reading}:
-            reading.append(ResolvedReading(
-                title=item["title"], url=item["url"], source=item["source"], why=r.why,
-            ))
+            reading.append(
+                ResolvedReading(
+                    title=item["title"],
+                    url=item["url"],
+                    source=item["source"],
+                    why=r.why,
+                )
+            )
     reading = reading[:MAX_READING]
 
     return WeeklyReport(
-        week_label=label, intro=output.intro, top_stories=top, themes=themes,
-        reading=reading, stats=compute_stats(events),
+        week_label=label,
+        intro=output.intro,
+        top_stories=top,
+        themes=themes,
+        reading=reading,
+        stats=compute_stats(events),
     )
 
 
-def _compact(event: Dict[str, Any]) -> Dict[str, Any]:
+def _compact(event: dict[str, Any]) -> dict[str, Any]:
     primary = event["sources"][0]
     return {
         "event_id": event["event_id"],
@@ -258,8 +281,8 @@ def _compact(event: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def analyze_week(
-    events: List[Dict[str, Any]],
-    reading_items: List[RawItem],
+    events: list[dict[str, Any]],
+    reading_items: list[RawItem],
     label: str,
     api_key: str,
     model: str,
@@ -267,13 +290,20 @@ def analyze_week(
     audience: str,
 ) -> WeeklyReport:
     system = WEEKLY_PROMPT_TEMPLATE.format(
-        audience=audience.strip(), max_top=MAX_TOP_STORIES, max_themes=MAX_THEMES,
+        audience=audience.strip(),
+        max_top=MAX_TOP_STORIES,
+        max_themes=MAX_THEMES,
         max_reading=MAX_READING,
     )
-    reading = [{"url": i["url"], "title": i["title"], "summary": i["content"]}
-               for i in reading_items]
+    reading = [
+        {"url": i["url"], "title": i["title"], "summary": i["content"]} for i in reading_items
+    ]
     text, response = call_structured(
-        api_key, model, effort, system, WEEKLY_SCHEMA,
+        api_key,
+        model,
+        effort,
+        system,
+        WEEKLY_SCHEMA,
         f"<events>\n{json.dumps([_compact(e) for e in events], ensure_ascii=False, indent=1)}\n"
         f"</events>\n<reading>\n{json.dumps(reading, ensure_ascii=False, indent=1)}\n</reading>",
     )
@@ -294,24 +324,30 @@ def analyze_week(
 
 
 def _story_line(s: StoryRef) -> str:
-    return (f"{BADGES[s.priority].split()[0]} {_link(s.url, s.title)} "
-            f"_({_escape(s.source_name)} · {EVIDENCE[s.evidence_status]})_")
+    return (
+        f"{BADGES[s.priority].split()[0]} {_link(s.url, s.title)} "
+        f"_({_escape(s.source_name)} · {EVIDENCE[s.evidence_status]})_"
+    )
 
 
-def build_weekly_payload(report: WeeklyReport) -> Dict[str, Any]:
+def build_weekly_payload(report: WeeklyReport) -> dict[str, Any]:
     st = report.stats
     pri = st.get("priority", {})
     counts = "   ".join(f"{badge} {pri.get(level, 0)}" for level, badge in BADGES.items())
     top_categories = " · ".join(
         f"{CATEGORIES.get(c, c)} {n}" for c, n in list(st.get("category", {}).items())[:4]
     )
-    blocks: List[Dict[str, Any]] = [
-        {"type": "header", "text": {"type": "plain_text",
-                                    "text": f"🗓️ Weekly Radar — {report.week_label}"}},
+    blocks: list[dict[str, Any]] = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": f"🗓️ Weekly Radar — {report.week_label}"},
+        },
         _section(f"*The week in brief*\n{_escape(report.intro)}"),
-        _context(f"{_plural(st.get('events', 0), 'event')} in "
-                 f"{_plural(st.get('digests', 0), 'digest')} · "
-                 f"{st.get('confirmed', 0)} ✅ officially confirmed   {counts}"),
+        _context(
+            f"{_plural(st.get('events', 0), 'event')} in "
+            f"{_plural(st.get('digests', 0), 'digest')} · "
+            f"{st.get('confirmed', 0)} ✅ officially confirmed   {counts}"
+        ),
     ]
     if top_categories:
         blocks.append(_context(top_categories))
@@ -325,16 +361,19 @@ def build_weekly_payload(report: WeeklyReport) -> Dict[str, Any]:
         blocks += [{"type": "divider"}, _section("*🧵 Themes of the week*")]
         for t in report.themes:
             stories = "\n".join(f"• {_story_line(s)}" for s in t.stories)
-            blocks.append(_section(
-                f"*{_escape(t.title)}*\n{_escape(t.synthesis)}\n{stories}\n"
-                f"*What to watch:* {_escape(t.what_to_watch)}"
-            ))
+            blocks.append(
+                _section(
+                    f"*{_escape(t.title)}*\n{_escape(t.synthesis)}\n{stories}\n"
+                    f"*What to watch:* {_escape(t.what_to_watch)}"
+                )
+            )
 
     if report.reading:
         blocks += [{"type": "divider"}, _section("*📚 Worth reading* _(analysis, not news)_")]
         for r in report.reading:
-            blocks.append(_section(f"{_link(r.url, r.title)} _({_escape(r.source)})_\n"
-                                   f"{_escape(r.why)}"))
+            blocks.append(
+                _section(f"{_link(r.url, r.title)} _({_escape(r.source)})_\n{_escape(r.why)}")
+            )
 
     blocks = blocks[: MAX_BLOCKS - 3]  # legend, AI notice, footer
     blocks.append(_context(EVIDENCE_LEGEND))
@@ -356,10 +395,10 @@ def send_weekly(report: WeeklyReport, webhook_url: str, dry_run: bool) -> None:
 # --- Pipeline --------------------------------------------------------------------------------
 
 
-def run(now: Optional[datetime] = None) -> int:
+def run(now: datetime | None = None) -> int:
     secrets, config = load_all()
     settings = config.settings
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
 
     store = Storage.connect(secrets.supabase_url, secrets.supabase_service_key)
     if store is None:
@@ -379,24 +418,43 @@ def run(now: Optional[datetime] = None) -> int:
     # Apply today's policy to older digests too: no unverified claims in the radar.
     unverified = [e for e in events if e["evidence_status"] == "UNVERIFIED"]
     events = [e for e in events if e["evidence_status"] != "UNVERIFIED"]
-    logger.info("%s: %d event(s) from posted digests (%d unverified left out)",
-                label, len(events), len(unverified))
+    logger.info(
+        "%s: %d event(s) from posted digests (%d unverified left out)",
+        label,
+        len(events),
+        len(unverified),
+    )
     if not events:
         logger.info("No digest was posted in this window; nothing to synthesize.")
         return 0
 
     reading_items, _ = fetch_rss_feeds(
-        config.sources.reading_feeds, start, settings.max_items_per_source,
-        settings.max_content_chars, settings.request_timeout_seconds,
+        config.sources.reading_feeds,
+        start,
+        settings.max_items_per_source,
+        settings.max_content_chars,
+        settings.request_timeout_seconds,
     )
     reading_items = [i for i in reading_items if datetime.fromisoformat(i["published_at"]) < end]
-    logger.info("%d reading item(s) from %d feed(s)", len(reading_items),
-                len(config.sources.reading_feeds))
+    logger.info(
+        "%d reading item(s) from %d feed(s)", len(reading_items), len(config.sources.reading_feeds)
+    )
 
-    report = analyze_week(events, reading_items, label, secrets.anthropic_api_key,
-                          settings.model_name, settings.effort, settings.audience)
-    logger.info("Weekly Radar: %d top stories, %d themes, %d reading(s)",
-                len(report.top_stories), len(report.themes), len(report.reading))
+    report = analyze_week(
+        events,
+        reading_items,
+        label,
+        secrets.anthropic_api_key,
+        settings.model_name,
+        settings.effort,
+        settings.audience,
+    )
+    logger.info(
+        "Weekly Radar: %d top stories, %d themes, %d reading(s)",
+        len(report.top_stories),
+        len(report.themes),
+        len(report.reading),
+    )
 
     send_weekly(report, secrets.slack_webhook_url, secrets.dry_run)
     store.record_weekly(report, len(events), secrets.dry_run)
@@ -404,7 +462,9 @@ def run(now: Optional[datetime] = None) -> int:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
     try:
         sys.exit(run())
     except Exception:

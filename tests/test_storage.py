@@ -17,7 +17,7 @@ from src.storage import (
     filter_already_published,
     next_source_status,
 )
-from tests.test_pipeline import ITEMS, event, run
+from tests.helpers import ITEMS, event, run
 
 
 def item(url, content="body", title="Title"):
@@ -41,7 +41,9 @@ class RepublicationTests(unittest.TestCase):
         # A status-page incident keeps its URL while its content moves to "Resolved".
         before = item("https://a", "Investigating")
         after = item("https://a", "Investigating. Resolved at 10:00 UTC.")
-        kept, dropped, updates = filter_already_published([after], {"https://a": content_hash(before)})
+        kept, dropped, updates = filter_already_published(
+            [after], {"https://a": content_hash(before)}
+        )
         self.assertEqual((dropped, updates), (0, 1))
         self.assertTrue(kept[0]["update"])
 
@@ -79,12 +81,17 @@ class FakeStorage(Storage):
 
 class StorageRowTests(unittest.TestCase):
     def setUp(self):
-        self.report = run([
-            event("ChatGPT Wallet", [
-                ("https://openai.com/index/introducing-chatgpt-wallet", "PRIMARY"),
-                ("https://techcrunch.com/chatgpt-wallet", "SUPPORTING"),
-            ]),
-        ])
+        self.report = run(
+            [
+                event(
+                    "ChatGPT Wallet",
+                    [
+                        ("https://openai.com/index/introducing-chatgpt-wallet", "PRIMARY"),
+                        ("https://techcrunch.com/chatgpt-wallet", "SUPPORTING"),
+                    ],
+                ),
+            ]
+        )
 
     def test_new_secret_keys_are_sent_as_apikey_only(self):
         store = Storage("https://x.supabase.co", "sb_secret_abc")
@@ -98,12 +105,16 @@ class StorageRowTests(unittest.TestCase):
     def test_published_articles_get_their_hash_and_event(self):
         store = FakeStorage()
         store.record_outcome(ITEMS, self.report, "aid", posted=True)
-        published = next(b for m, t, b in store.calls if t == "articles" and b
-                         and b[0]["status"] == "PUBLISHED")
-        self.assertEqual({r["url"] for r in published}, {
-            "https://openai.com/index/introducing-chatgpt-wallet",
-            "https://techcrunch.com/chatgpt-wallet",
-        })
+        published = next(
+            b for m, t, b in store.calls if t == "articles" and b and b[0]["status"] == "PUBLISHED"
+        )
+        self.assertEqual(
+            {r["url"] for r in published},
+            {
+                "https://openai.com/index/introducing-chatgpt-wallet",
+                "https://techcrunch.com/chatgpt-wallet",
+            },
+        )
         self.assertTrue(all(r["last_event_id"] == "evt_20261114_001" for r in published))
         self.assertTrue(all(r["last_published_hash"] for r in published))
         dist = next(b for m, t, b in store.calls if t == "distributions")
@@ -114,16 +125,18 @@ class StorageRowTests(unittest.TestCase):
         store.record_outcome(ITEMS, self.report, "aid", posted=False)
         statuses = {r["status"] for m, t, b in store.calls if t == "articles" for r in b}
         self.assertEqual(statuses, {"ANALYZED", "REJECTED"})
-        self.assertFalse(any("last_published_hash" in r
-                             for m, t, b in store.calls if t == "articles" for r in b))
+        self.assertFalse(
+            any("last_published_hash" in r for m, t, b in store.calls if t == "articles" for r in b)
+        )
 
     def test_analysis_events_and_signals_rows(self):
         store = FakeStorage()
         analysis_id = store.record_analysis(self.report, items_in=8, dry_run=True)
         self.assertEqual(analysis_id, "00000000-0000-0000-0000-000000000001")
         events = next(b for m, t, b in store.calls if t == "events")
-        self.assertEqual(events[0]["primary_url"],
-                         "https://openai.com/index/introducing-chatgpt-wallet")
+        self.assertEqual(
+            events[0]["primary_url"], "https://openai.com/index/introducing-chatgpt-wallet"
+        )
         self.assertEqual(events[0]["payload"]["event_id"], "evt_20261114_001")
 
     def test_posted_since_queries_posted_distributions_in_utc(self):
@@ -132,7 +145,6 @@ class StorageRowTests(unittest.TestCase):
 
         store = FakeStorage()
         store.calls_params = []
-        original = store._request
 
         def capture(method, table, params=None, body=None, prefer=None):
             store.calls_params.append(params)
